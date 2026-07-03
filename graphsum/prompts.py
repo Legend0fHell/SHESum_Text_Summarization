@@ -49,6 +49,25 @@ Instructions:
 """
 
 
+DIRECT_SUMMARY_PROMPT = """You are a careful multi-document summarizer. Write in {language_name}.
+
+Task:
+Summarize the following source documents directly. Do not use external knowledge. Do not invent facts.
+
+Source documents:
+---
+{source_text}
+---
+
+Instructions:
+- Cover the central events, actors, causes, consequences, and important context.
+- Preserve important entities, factual phrases, numbers, dates, and contrasting claims.
+- Preserve major disagreements, caveats, or uncertainty when sources disagree.
+- Do not mention "source documents", "prompt", or the summarization process.
+- Return only the summary.
+"""
+
+
 def language_name(language: str) -> str:
     return "Vietnamese" if language == "vi" else "English"
 
@@ -66,4 +85,11 @@ def render_merge_prompt(topic_summaries: str, source_support: str, language: str
         language_name=language_name(language),
         topic_summaries=topic_summaries.strip(),
         source_support=source_support.strip(),
+    )
+
+
+def render_direct_prompt(source_text: str, language: str) -> str:
+    return DIRECT_SUMMARY_PROMPT.format(
+        language_name=language_name(language),
+        source_text=source_text.strip(),
     )

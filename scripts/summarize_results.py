@@ -24,6 +24,7 @@ NUMERIC_COLUMNS = [
 
 GROUP_COLUMNS = [
     "dataset",
+    "run_mode",
     "salience",
     "alpha",
     "beta",

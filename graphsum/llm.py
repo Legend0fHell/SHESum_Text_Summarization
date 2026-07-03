@@ -22,7 +22,12 @@ class BaseLLM:
 class DryRunLLM(BaseLLM):
     def summarize(self, prompt: str) -> LLMResult:
         # Deterministic placeholder for pipeline debugging. Do not report as a paper result.
-        evidence = _extract_prompt_block(prompt, "Source support") or _extract_prompt_block(prompt, "Source-derived support") or prompt
+        evidence = (
+            _extract_prompt_block(prompt, "Source support")
+            or _extract_prompt_block(prompt, "Source-derived support")
+            or _extract_prompt_block(prompt, "Source documents")
+            or prompt
+        )
         sentences = re.split(r"(?<=[.!?。！？])\s+", evidence.strip())
         text = " ".join(sentences[:5]).strip()[:2000]
         return LLMResult(text=text, input_tokens=count_tokens(prompt), output_tokens=count_tokens(text))

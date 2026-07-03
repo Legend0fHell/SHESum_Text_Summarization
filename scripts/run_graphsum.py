@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -11,7 +12,7 @@ from graphsum.data import load_samples
 from graphsum.evaluate import rouge_scores, write_csv
 from graphsum.graph import GraphWeights, weight_grid
 from graphsum.llm import make_llm
-from graphsum.pipeline import Embedder, PipelineConfig, run_sample
+from graphsum.pipeline import Embedder, PipelineConfig, run_direct_sample, run_sample
 
 
 def main() -> None:
@@ -39,10 +40,57 @@ def main() -> None:
     parser.add_argument("--pacsum-lambda2", type=float, default=1.0)
     parser.add_argument("--entity-merge-threshold", type=float, default=0.85)
     parser.add_argument("--no-graph", action="store_true", help="Sequential hierarchical baseline without graph clustering.")
+    parser.add_argument("--pure-llm", action="store_true", help="Direct baseline: feed all source text to the LLM without graph, chunking, support selection, or embeddings.")
     parser.add_argument("--output", default="runs/graphsum_results.csv")
     args = parser.parse_args()
 
     samples = load_samples(args.dataset, args.data_root, limit=args.limit)
+    llm = make_llm(args.llm, model=args.model, base_url=args.base_url, api_key=args.api_key, temperature=args.temperature)
+    rows = []
+    if args.pure_llm:
+        for sample in samples:
+            started = time.perf_counter()
+            output = run_direct_sample(sample, llm)
+            runtime_seconds = time.perf_counter() - started
+            rouge = rouge_scores(output.summary, sample.references)
+            rows.append(
+                {
+                    "dataset": sample.dataset,
+                    "sample_id": sample.sample_id,
+                    "run_mode": "pure_llm",
+                    "salience": "none",
+                    "alpha": "",
+                    "beta": "",
+                    "gamma": "",
+                    "use_graph": False,
+                    "chunking": "none",
+                    "embedding_backend": "none",
+                    "embedding_model": "none",
+                    "llm": args.llm,
+                    "llm_model": getattr(llm, "model", "dry_run"),
+                    "pacsum_beta": "",
+                    "pacsum_lambda1": "",
+                    "pacsum_lambda2": "",
+                    "entity_merge_threshold": "",
+                    "rouge2": rouge["rouge2"],
+                    "rougeL": rouge["rougeL"],
+                    "rouge_backend": rouge["rouge_backend"],
+                    "reference_count": rouge["reference_count"],
+                    "selected_reference_index": rouge["selected_reference_index"],
+                    "reference_selector": rouge["reference_selector"],
+                    "input_tokens": output.input_tokens,
+                    "output_tokens": output.output_tokens,
+                    "llm_calls": output.llm_calls,
+                    "runtime_seconds": runtime_seconds,
+                    "chunk_count": output.chunk_count,
+                    "topic_count": output.topic_count,
+                    "generated_summary": output.summary,
+                }
+            )
+            _print_row(rows[-1])
+        write_csv(Path(args.output), rows)
+        return
+
     embedder = Embedder(
         dry_run=args.dry_embed,
         backend=args.embedding_backend,
@@ -50,8 +98,6 @@ def main() -> None:
         base_url=args.embedding_base_url,
         api_key=args.embedding_api_key,
     )
-    llm = make_llm(args.llm, model=args.model, base_url=args.base_url, api_key=args.api_key, temperature=args.temperature)
-    rows = []
     weights_list = weight_grid() if args.grid else [GraphWeights(args.alpha, args.beta, 1 - args.alpha - args.beta)]
     for weights in weights_list:
         config = PipelineConfig(
@@ -73,6 +119,7 @@ def main() -> None:
                 {
                     "dataset": sample.dataset,
                     "sample_id": sample.sample_id,
+                    "run_mode": "graphsum",
                     "salience": args.salience,
                     "alpha": weights.alpha,
                     "beta": weights.beta,
@@ -99,10 +146,15 @@ def main() -> None:
                     "runtime_seconds": runtime_seconds,
                     "chunk_count": output.chunk_count,
                     "topic_count": output.topic_count,
+                    "generated_summary": output.summary,
                 }
             )
-            print(rows[-1])
+            _print_row(rows[-1])
     write_csv(Path(args.output), rows)
+
+
+def _print_row(row: dict[str, object]) -> None:
+    print(json.dumps(row, ensure_ascii=True))
 
 
 if __name__ == "__main__":

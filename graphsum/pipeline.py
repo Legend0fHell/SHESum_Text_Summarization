@@ -12,7 +12,7 @@ from .graph import GraphWeights, build_weighted_edges, cluster_chunks
 from .llm import BaseLLM, LLMResult, count_tokens
 from .chunking import make_chunks
 from .preprocess import Chunk, TriSentenceUnit, make_sentences, make_tri_units
-from .prompts import render_merge_prompt, render_topic_prompt
+from .prompts import render_direct_prompt, render_merge_prompt, render_topic_prompt
 from .salience import compact_unit_texts, select_centroid_topk, select_pacsum
 
 
@@ -133,6 +133,12 @@ def run_sample(sample: Sample, config: PipelineConfig, embedder: Embedder, llm: 
     return PipelineOutput(final.text, final.input_tokens, final.output_tokens, final.calls, len(chunks), len(topics))
 
 
+def run_direct_sample(sample: Sample, llm: BaseLLM) -> PipelineOutput:
+    source_text = "\n\n".join(_document_block(index, document) for index, document in enumerate(sample.documents, start=1))
+    result = llm.summarize(render_direct_prompt(source_text, sample.language))
+    return PipelineOutput(result.text, result.input_tokens, result.output_tokens, result.calls, len(sample.documents), 1)
+
+
 def _attach_embeddings(units: list[TriSentenceUnit], chunks: list[Chunk], embedder: Embedder) -> None:
     vectors = embedder.encode([unit.text for unit in units] + [chunk.text for chunk in chunks])
     for unit, vector in zip(units, vectors[: len(units)]):
@@ -234,6 +240,16 @@ def _topic_prompt(chunks: list[Chunk], support: str, language: str) -> str:
 
 def _merge_prompt(summaries: str, support: str, language: str) -> str:
     return render_merge_prompt(summaries, support, language)
+
+
+def _document_block(index: int, document) -> str:
+    lines = [f"[Document {index}: {document.doc_id}]"]
+    if document.title:
+        lines.append(f"Title: {document.title}")
+    if document.source:
+        lines.append(f"Source: {document.source}")
+    lines.append(document.text)
+    return "\n".join(lines)
 
 
 def _hash_embedding(text: str, dims: int = 384) -> list[float]:
