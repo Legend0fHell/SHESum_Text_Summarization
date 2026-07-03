@@ -1,0 +1,109 @@
+from __future__ import annotations
+
+import argparse
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from graphsum.data import load_samples
+from graphsum.evaluate import rouge_scores, write_csv
+from graphsum.graph import GraphWeights, weight_grid
+from graphsum.llm import make_llm
+from graphsum.pipeline import Embedder, PipelineConfig, run_sample
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run graph-guided Extract-Support summarization experiments.")
+    parser.add_argument("--dataset", choices=["vn_mds", "vims", "multi_news"], required=True)
+    parser.add_argument("--data-root", default="datasets")
+    parser.add_argument("--limit", type=int, default=3)
+    parser.add_argument("--salience", choices=["e1", "e2a", "e2b"], default="e1")
+    parser.add_argument("--llm", choices=["dry_run", "openai_compatible"], default="dry_run")
+    parser.add_argument("--model", default=None)
+    parser.add_argument("--base-url", default=None)
+    parser.add_argument("--api-key", default=None)
+    parser.add_argument("--temperature", type=float, default=None)
+    parser.add_argument("--dry-embed", action="store_true", help="Use hash embeddings instead of BGE-M3.")
+    parser.add_argument("--embedding-backend", choices=["sentence_transformers", "openai_compatible"], default=None)
+    parser.add_argument("--embedding-model", default=None)
+    parser.add_argument("--embedding-base-url", default=None)
+    parser.add_argument("--embedding-api-key", default=None)
+    parser.add_argument("--chunking", choices=["semantic", "simple"], default="semantic")
+    parser.add_argument("--grid", action="store_true", help="Run the alpha/beta/gamma graph-weight grid.")
+    parser.add_argument("--alpha", type=float, default=0.10)
+    parser.add_argument("--beta", type=float, default=0.20)
+    parser.add_argument("--pacsum-beta", type=float, default=0.0)
+    parser.add_argument("--pacsum-lambda1", type=float, default=0.0)
+    parser.add_argument("--pacsum-lambda2", type=float, default=1.0)
+    parser.add_argument("--entity-merge-threshold", type=float, default=0.85)
+    parser.add_argument("--no-graph", action="store_true", help="Sequential hierarchical baseline without graph clustering.")
+    parser.add_argument("--output", default="runs/graphsum_results.csv")
+    args = parser.parse_args()
+
+    samples = load_samples(args.dataset, args.data_root, limit=args.limit)
+    embedder = Embedder(
+        dry_run=args.dry_embed,
+        backend=args.embedding_backend,
+        model_name=args.embedding_model,
+        base_url=args.embedding_base_url,
+        api_key=args.embedding_api_key,
+    )
+    llm = make_llm(args.llm, model=args.model, base_url=args.base_url, api_key=args.api_key, temperature=args.temperature)
+    rows = []
+    weights_list = weight_grid() if args.grid else [GraphWeights(args.alpha, args.beta, 1 - args.alpha - args.beta)]
+    for weights in weights_list:
+        config = PipelineConfig(
+            salience_method=args.salience,
+            graph_weights=weights,
+            use_graph=not args.no_graph,
+            chunking_method=args.chunking,
+            pacsum_beta=args.pacsum_beta,
+            pacsum_lambda1=args.pacsum_lambda1,
+            pacsum_lambda2=args.pacsum_lambda2,
+            entity_merge_threshold=args.entity_merge_threshold,
+        )
+        for sample in samples:
+            started = time.perf_counter()
+            output = run_sample(sample, config, embedder, llm)
+            runtime_seconds = time.perf_counter() - started
+            rouge = rouge_scores(output.summary, sample.references)
+            rows.append(
+                {
+                    "dataset": sample.dataset,
+                    "sample_id": sample.sample_id,
+                    "salience": args.salience,
+                    "alpha": weights.alpha,
+                    "beta": weights.beta,
+                    "gamma": weights.gamma,
+                    "use_graph": not args.no_graph,
+                    "chunking": args.chunking,
+                    "embedding_backend": embedder.backend,
+                    "embedding_model": embedder.model_name,
+                    "llm": args.llm,
+                    "llm_model": getattr(llm, "model", "dry_run"),
+                    "pacsum_beta": args.pacsum_beta,
+                    "pacsum_lambda1": args.pacsum_lambda1,
+                    "pacsum_lambda2": args.pacsum_lambda2,
+                    "entity_merge_threshold": args.entity_merge_threshold,
+                    "rouge2": rouge["rouge2"],
+                    "rougeL": rouge["rougeL"],
+                    "rouge_backend": rouge["rouge_backend"],
+                    "reference_count": rouge["reference_count"],
+                    "selected_reference_index": rouge["selected_reference_index"],
+                    "reference_selector": rouge["reference_selector"],
+                    "input_tokens": output.input_tokens,
+                    "output_tokens": output.output_tokens,
+                    "llm_calls": output.llm_calls,
+                    "runtime_seconds": runtime_seconds,
+                    "chunk_count": output.chunk_count,
+                    "topic_count": output.topic_count,
+                }
+            )
+            print(rows[-1])
+    write_csv(Path(args.output), rows)
+
+
+if __name__ == "__main__":
+    main()

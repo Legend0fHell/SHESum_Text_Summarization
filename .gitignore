@@ -1,0 +1,10 @@
+datasets/ViMs
+datasets/VN-MDS
+
+__pycache__/
+.env
+.env.*
+!.env.example
+
+.venv/
+runs/

@@ -1,0 +1,15 @@
+numpy
+pandas
+sentence-transformers
+underthesea==9.2.11
+spacy==3.8.14
+datasets
+langchain
+langchain-experimental
+langchain-openai
+langchain-text-splitters
+tiktoken
+igraph
+leidenalg
+rouge-score
+python-dotenv
