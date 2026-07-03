@@ -6,7 +6,7 @@ Use this checklist to fill the TODO tables in `paper/draft.md`. Do not report dr
 
 - VN-MDS and ViMs each provide two human gold summaries per sample.
 - Score each generated summary against both gold summaries, then select one reference per sample by maximum mean of ROUGE-2 and ROUGE-L.
-- Report ROUGE-2 and ROUGE-L from the same selected reference, not independently maximized references.
+- Report ROUGE-1, ROUGE-2, and ROUGE-L from the same selected reference, not independently maximized references.
 - VN-MDS uses raw references only (`*.ref1.txt`, `*.ref2.txt`); tokenized references (`*.tok.txt`) are excluded.
 - Result CSVs include the generated summary in `generated_summary`; keep these files for qualitative inspection and error analysis.
 - Result CSVs include `reference_count`, `selected_reference_index`, and `reference_selector` for auditability.

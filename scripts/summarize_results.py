@@ -12,6 +12,7 @@ from graphsum.evaluate import write_csv
 
 
 NUMERIC_COLUMNS = [
+    "rouge1",
     "rouge2",
     "rougeL",
     "input_tokens",
