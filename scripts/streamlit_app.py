@@ -63,6 +63,22 @@ def main() -> None:
             use_graph = not st.checkbox("Disable graph clustering", value=env_experiment.no_graph)
             chunking_options = ["semantic", "simple"]
             chunking = st.selectbox("Chunking", chunking_options, index=chunking_options.index(env_experiment.chunking) if env_experiment.chunking in chunking_options else 0)
+            target_min_tokens = st.number_input("Target min tokens", min_value=1, max_value=10000, value=env_experiment.target_min_tokens, step=50)
+            target_max_tokens = st.number_input("Target max tokens", min_value=1, max_value=20000, value=env_experiment.target_max_tokens, step=50)
+            semantic_breakpoint_percentile = st.number_input(
+                "Semantic breakpoint percentile",
+                min_value=1.0,
+                max_value=99.0,
+                value=env_experiment.semantic_breakpoint_percentile,
+                step=1.0,
+            )
+            semantic_min_chunk_tokens = st.number_input(
+                "Semantic min chunk tokens",
+                min_value=1,
+                max_value=10000,
+                value=env_experiment.semantic_min_chunk_tokens or max(100, env_experiment.target_min_tokens // 4),
+                step=25,
+            )
             dry_embed = st.checkbox(
                 "Dry embeddings",
                 value=env_experiment.dry_embed,
@@ -127,6 +143,10 @@ def main() -> None:
                     graph_weights=GraphWeights(alpha, beta, 1 - alpha - beta),
                     use_graph=use_graph,
                     chunking_method=chunking,
+                    target_min_tokens=target_min_tokens,
+                    target_max_tokens=target_max_tokens,
+                    semantic_breakpoint_percentile=semantic_breakpoint_percentile,
+                    semantic_min_chunk_tokens=semantic_min_chunk_tokens,
                     pacsum_beta=pacsum_beta,
                     pacsum_lambda1=pacsum_lambda1,
                     pacsum_lambda2=pacsum_lambda2,

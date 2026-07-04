@@ -44,7 +44,7 @@ $env:GRAPHSUM_LLM_API_KEY="ollama"
 $env:GRAPHSUM_LLM_TEMPERATURE="0.0"
 ```
 
-Experiment defaults can also be set through `.env`, including `GRAPHSUM_DATASET`, `GRAPHSUM_LIMIT`, `GRAPHSUM_SALIENCE`, `GRAPHSUM_CHUNKING`, `GRAPHSUM_NO_GRAPH`, `GRAPHSUM_PURE_LLM`, `GRAPHSUM_ALPHA`, `GRAPHSUM_BETA`, PACSUM settings, `GRAPHSUM_ENTITY_MERGE_THRESHOLD`, `GRAPHSUM_OUTPUT`, and `GRAPHSUM_AGGREGATE_OUTPUT`.
+Experiment defaults can also be set through `.env`, including `GRAPHSUM_DATASET`, `GRAPHSUM_LIMIT`, `GRAPHSUM_SALIENCE`, `GRAPHSUM_CHUNKING`, `GRAPHSUM_TARGET_MIN_TOKENS`, `GRAPHSUM_TARGET_MAX_TOKENS`, `GRAPHSUM_SEMANTIC_BREAKPOINT_PERCENTILE`, `GRAPHSUM_SEMANTIC_MIN_CHUNK_TOKENS`, `GRAPHSUM_NO_GRAPH`, `GRAPHSUM_PURE_LLM`, `GRAPHSUM_ALPHA`, `GRAPHSUM_BETA`, PACSUM settings, `GRAPHSUM_ENTITY_MERGE_THRESHOLD`, `GRAPHSUM_OUTPUT`, and `GRAPHSUM_AGGREGATE_OUTPUT`.
 
 Equivalent CLI overrides:
 
@@ -58,7 +58,7 @@ Dry-run smoke test:
 python scripts/run_graphsum.py --dataset vn_mds --data-root datasets --limit 2 --salience e1 --llm dry_run --dry-embed
 ```
 
-The default chunker is LangChain Experimental `SemanticChunker` with BGE-M3 embeddings. Use `--chunking simple` only when intentionally running the explicit simple-chunking ablation.
+The default chunker is paragraph-aware semantic chunking. Paragraphs are treated as structural candidates first; oversized paragraphs are split with LangChain Experimental `SemanticChunker`, and adjacent small paragraph candidates are merged up to the configured token range. Use `--chunking simple` only when intentionally running the explicit simple-chunking ablation.
 
 Prompt templates live in `graphsum/prompts.py`:
 

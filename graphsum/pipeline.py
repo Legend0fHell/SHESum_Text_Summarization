@@ -25,6 +25,8 @@ class PipelineConfig:
     evidence_max_tokens: int = 400
     target_min_tokens: int = 1000
     target_max_tokens: int = 1500
+    semantic_breakpoint_percentile: float = 65.0
+    semantic_min_chunk_tokens: int | None = None
     use_graph: bool = True
     chunking_method: str = "semantic"
     pacsum_beta: float = 0.0
@@ -135,6 +137,8 @@ def run_sample(
                 method=config.chunking_method,
                 target_min_tokens=config.target_min_tokens,
                 target_max_tokens=config.target_max_tokens,
+                semantic_breakpoint_percentile=config.semantic_breakpoint_percentile,
+                semantic_min_chunk_tokens=config.semantic_min_chunk_tokens,
             )
         )
     unit_lookup = {unit.unit_id: unit for unit in units}

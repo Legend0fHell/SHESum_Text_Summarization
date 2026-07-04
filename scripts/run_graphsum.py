@@ -37,6 +37,10 @@ def main() -> None:
     parser.add_argument("--embedding-base-url", default=None)
     parser.add_argument("--embedding-api-key", default=None)
     parser.add_argument("--chunking", choices=["semantic", "simple"], default=settings.chunking)
+    parser.add_argument("--target-min-tokens", type=int, default=settings.target_min_tokens)
+    parser.add_argument("--target-max-tokens", type=int, default=settings.target_max_tokens)
+    parser.add_argument("--semantic-breakpoint-percentile", type=float, default=settings.semantic_breakpoint_percentile)
+    parser.add_argument("--semantic-min-chunk-tokens", type=int, default=settings.semantic_min_chunk_tokens)
     parser.add_argument("--grid", action=argparse.BooleanOptionalAction, default=settings.grid, help="Run the alpha/beta/gamma graph-weight grid.")
     parser.add_argument("--alpha", type=float, default=settings.alpha)
     parser.add_argument("--beta", type=float, default=settings.beta)
@@ -70,6 +74,10 @@ def main() -> None:
                     "gamma": "",
                     "use_graph": False,
                     "chunking": "none",
+                    "target_min_tokens": "",
+                    "target_max_tokens": "",
+                    "semantic_breakpoint_percentile": "",
+                    "semantic_min_chunk_tokens": "",
                     "embedding_backend": "none",
                     "embedding_model": "none",
                     "llm": args.llm,
@@ -112,6 +120,10 @@ def main() -> None:
             graph_weights=weights,
             use_graph=not args.no_graph,
             chunking_method=args.chunking,
+            target_min_tokens=args.target_min_tokens,
+            target_max_tokens=args.target_max_tokens,
+            semantic_breakpoint_percentile=args.semantic_breakpoint_percentile,
+            semantic_min_chunk_tokens=args.semantic_min_chunk_tokens,
             pacsum_beta=args.pacsum_beta,
             pacsum_lambda1=args.pacsum_lambda1,
             pacsum_lambda2=args.pacsum_lambda2,
@@ -133,6 +145,10 @@ def main() -> None:
                     "gamma": weights.gamma,
                     "use_graph": not args.no_graph,
                     "chunking": args.chunking,
+                    "target_min_tokens": args.target_min_tokens,
+                    "target_max_tokens": args.target_max_tokens,
+                    "semantic_breakpoint_percentile": args.semantic_breakpoint_percentile,
+                    "semantic_min_chunk_tokens": args.semantic_min_chunk_tokens or "",
                     "embedding_backend": embedder.backend,
                     "embedding_model": embedder.model_name,
                     "llm": args.llm,

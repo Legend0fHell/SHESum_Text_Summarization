@@ -44,6 +44,10 @@ class ExperimentSettings:
     entity_merge_threshold: float
     no_graph: bool
     pure_llm: bool
+    target_min_tokens: int
+    target_max_tokens: int
+    semantic_breakpoint_percentile: float
+    semantic_min_chunk_tokens: int | None
     output: str
     aggregate_output: str | None
 
@@ -84,6 +88,10 @@ def experiment_settings() -> ExperimentSettings:
         entity_merge_threshold=_float_env("GRAPHSUM_ENTITY_MERGE_THRESHOLD", 0.85),
         no_graph=_bool_env("GRAPHSUM_NO_GRAPH", False),
         pure_llm=_bool_env("GRAPHSUM_PURE_LLM", False),
+        target_min_tokens=_int_env("GRAPHSUM_TARGET_MIN_TOKENS", 1000),
+        target_max_tokens=_int_env("GRAPHSUM_TARGET_MAX_TOKENS", 1500),
+        semantic_breakpoint_percentile=_float_env("GRAPHSUM_SEMANTIC_BREAKPOINT_PERCENTILE", 65.0),
+        semantic_min_chunk_tokens=_optional_int_env("GRAPHSUM_SEMANTIC_MIN_CHUNK_TOKENS"),
         output=os.environ.get("GRAPHSUM_OUTPUT", "runs/graphsum_results.csv"),
         aggregate_output=_empty_to_none(os.environ.get("GRAPHSUM_AGGREGATE_OUTPUT")),
     )
@@ -99,6 +107,11 @@ def _bool_env(name: str, default: bool) -> bool:
 def _int_env(name: str, default: int) -> int:
     value = os.environ.get(name)
     return int(value) if value not in {None, ""} else default
+
+
+def _optional_int_env(name: str) -> int | None:
+    value = os.environ.get(name)
+    return int(value) if value not in {None, ""} else None
 
 
 def _float_env(name: str, default: float) -> float:
