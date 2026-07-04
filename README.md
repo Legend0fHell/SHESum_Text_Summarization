@@ -21,6 +21,8 @@ beta in [0, 1-alpha], step 0.10, including 1-alpha
 
 Entity/factual phrase extraction runs at chunk level. Raw chunk named entities are consolidated into canonical aliases with embedding cosine similarity using `--entity-merge-threshold` (default `0.85`), while numeric/date/money factual phrases are only exact-normalized to avoid corrupting values. Graph entity similarity uses typed binary TF-IDF cosine over the canonical phrase set. Underthesea labels and regex factual phrase types are retained for Vietnamese; English uses spaCy `en_core_web_sm`.
 
+Duplicate-aware graph and prompt compaction are enabled by default. Chunks with embedding cosine similarity above `--dedup-sim-threshold` (default `0.88`) are assigned to duplicate groups. Edges within a duplicate group are downweighted by `--duplicate-edge-factor` (default `0.35`) before Leiden, and repeated chunks inside each Leiden chunk community are omitted from the community prompt while remaining visible in Streamlit trace/provenance tables. Use `--no-dedup-chunks` or `--no-community-dedup` for ablations.
+
 ## Model Configuration
 
 Runtime defaults live in `graphsum/config.py`. A root `.env` file is loaded automatically if present, environment variables override code defaults, and CLI/sidebar values override both. Use `.env.example` as the template for endpoint settings and experiment defaults.
@@ -44,7 +46,7 @@ $env:GRAPHSUM_LLM_API_KEY="ollama"
 $env:GRAPHSUM_LLM_TEMPERATURE="0.0"
 ```
 
-Experiment defaults can also be set through `.env`, including `GRAPHSUM_DATASET`, `GRAPHSUM_LIMIT`, `GRAPHSUM_SALIENCE`, `GRAPHSUM_CHUNKING`, `GRAPHSUM_TARGET_MIN_TOKENS`, `GRAPHSUM_TARGET_MAX_TOKENS`, `GRAPHSUM_SEMANTIC_BREAKPOINT_PERCENTILE`, `GRAPHSUM_SEMANTIC_MIN_CHUNK_TOKENS`, `GRAPHSUM_NO_GRAPH`, `GRAPHSUM_PURE_LLM`, `GRAPHSUM_ALPHA`, `GRAPHSUM_BETA`, PACSUM settings, `GRAPHSUM_ENTITY_MERGE_THRESHOLD`, `GRAPHSUM_OUTPUT`, and `GRAPHSUM_AGGREGATE_OUTPUT`.
+Experiment defaults can also be set through `.env`, including `GRAPHSUM_DATASET`, `GRAPHSUM_LIMIT`, `GRAPHSUM_SALIENCE`, `GRAPHSUM_CHUNKING`, `GRAPHSUM_TARGET_MIN_TOKENS`, `GRAPHSUM_TARGET_MAX_TOKENS`, `GRAPHSUM_SEMANTIC_BREAKPOINT_PERCENTILE`, `GRAPHSUM_SEMANTIC_MIN_CHUNK_TOKENS`, duplicate-aware graph/prompt settings, `GRAPHSUM_NO_GRAPH`, `GRAPHSUM_PURE_LLM`, `GRAPHSUM_ALPHA`, `GRAPHSUM_BETA`, PACSUM settings, `GRAPHSUM_ENTITY_MERGE_THRESHOLD`, `GRAPHSUM_OUTPUT`, and `GRAPHSUM_AGGREGATE_OUTPUT`.
 
 Equivalent CLI overrides:
 

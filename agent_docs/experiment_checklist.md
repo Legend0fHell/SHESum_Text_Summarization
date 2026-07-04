@@ -11,7 +11,7 @@ Use this checklist to fill the TODO tables in `paper/draft.md`. Do not report dr
 - Result CSVs include the generated summary in `generated_summary`; keep these files for qualitative inspection and error analysis.
 - Result CSVs include `reference_count`, `selected_reference_index`, and `reference_selector` for auditability.
 - Real `openai_compatible` runs automatically write an aggregate metrics CSV beside the result file unless `--aggregate-output` is provided.
-- Use `streamlit run scripts/streamlit_app.py` for single-sample visualization of progress, segments, chunk communities, KNN graph edges, entities, summary graph, and final output.
+- Use `streamlit run scripts/streamlit_app.py` for single-sample visualization of progress, segments, chunk communities, duplicate groups, community prompt deduplication, KNN graph edges, entities, summary graph, and final output.
 
 ## Required Real Runs
 

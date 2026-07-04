@@ -48,6 +48,11 @@ class ExperimentSettings:
     target_max_tokens: int
     semantic_breakpoint_percentile: float
     semantic_min_chunk_tokens: int | None
+    dedup_chunks: bool
+    dedup_sim_threshold: float
+    dedup_require_shared_phrase: bool
+    duplicate_edge_factor: float
+    community_dedup: bool
     output: str
     aggregate_output: str | None
 
@@ -92,6 +97,11 @@ def experiment_settings() -> ExperimentSettings:
         target_max_tokens=_int_env("GRAPHSUM_TARGET_MAX_TOKENS", 1500),
         semantic_breakpoint_percentile=_float_env("GRAPHSUM_SEMANTIC_BREAKPOINT_PERCENTILE", 65.0),
         semantic_min_chunk_tokens=_optional_int_env("GRAPHSUM_SEMANTIC_MIN_CHUNK_TOKENS"),
+        dedup_chunks=_bool_env("GRAPHSUM_DEDUP_CHUNKS", True),
+        dedup_sim_threshold=_float_env("GRAPHSUM_DEDUP_SIM_THRESHOLD", 0.88),
+        dedup_require_shared_phrase=_bool_env("GRAPHSUM_DEDUP_REQUIRE_SHARED_PHRASE", False),
+        duplicate_edge_factor=_float_env("GRAPHSUM_DUPLICATE_EDGE_FACTOR", 0.35),
+        community_dedup=_bool_env("GRAPHSUM_COMMUNITY_DEDUP", True),
         output=os.environ.get("GRAPHSUM_OUTPUT", "runs/graphsum_results.csv"),
         aggregate_output=_empty_to_none(os.environ.get("GRAPHSUM_AGGREGATE_OUTPUT")),
     )

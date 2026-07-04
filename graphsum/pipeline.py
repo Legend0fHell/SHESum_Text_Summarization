@@ -8,6 +8,7 @@ import numpy as np
 
 from .config import embedding_settings
 from .data import Document, Sample
+from .dedup import ChunkDedupResult, build_chunk_duplicate_groups
 from .entities import canonicalize_phrase_maps, extract_phrase_map
 from .graph import GraphWeights, build_weighted_edge_details, cluster_chunks
 from .llm import BaseLLM, LLMResult, count_tokens
@@ -33,6 +34,11 @@ class PipelineConfig:
     pacsum_lambda1: float = 0.0
     pacsum_lambda2: float = 1.0
     entity_merge_threshold: float = 0.85
+    dedup_chunks: bool = True
+    dedup_sim_threshold: float = 0.88
+    dedup_require_shared_phrase: bool = False
+    duplicate_edge_factor: float = 0.35
+    community_dedup: bool = True
 
 
 @dataclass
@@ -53,6 +59,8 @@ class PipelineTrace:
     segments: list[dict[str, object]] = field(default_factory=list)
     chunks: list[dict[str, object]] = field(default_factory=list)
     chunk_entities: list[dict[str, object]] = field(default_factory=list)
+    duplicate_groups: list[dict[str, object]] = field(default_factory=list)
+    community_dedup: list[dict[str, object]] = field(default_factory=list)
     support: list[dict[str, object]] = field(default_factory=list)
     graph_edges: list[dict[str, object]] = field(default_factory=list)
     communities: list[dict[str, object]] = field(default_factory=list)
@@ -148,6 +156,8 @@ def run_sample(
 
     _record_progress(trace, progress_callback, "entities", "Extracting and consolidating chunk entities and factual phrases")
     _attach_phrases(chunks, sample.language, embedder, config.entity_merge_threshold)
+    dedup_result = _deduplicate_chunks(chunks, config)
+    _trace_duplicate_groups(trace, chunks, dedup_result)
 
     _record_progress(trace, progress_callback, "support", "Selecting source support segments")
     support_by_chunk = _select_support(units, chunks, unit_lookup, config)
@@ -155,7 +165,7 @@ def run_sample(
     _trace_support(trace, support_by_chunk, unit_lookup)
 
     _record_progress(trace, progress_callback, "graph", "Building chunk graph and Leiden chunk communities")
-    topics, graph_edges = _build_communities(chunks, config)
+    topics, graph_edges = _build_communities(chunks, config, dedup_result)
     _trace_graph(trace, chunks, graph_edges)
     _trace_communities(trace, chunks, topics)
 
@@ -164,13 +174,14 @@ def run_sample(
     topic_support_ids: list[list[str]] = []
     for topic in topics:
         topic_chunks = [chunks[idx] for idx in topic]
+        prompt_chunks = _deduplicate_community_chunks(topic_chunks, chunks, dedup_result, config, trace, len(topic_results))
         support_ids = []
-        for chunk in topic_chunks:
+        for chunk in prompt_chunks:
             support_ids.extend(support_by_chunk.get(chunk.chunk_id, []))
         topic_support_ids.append(support_ids)
-        prompt = _topic_prompt(topic_chunks, compact_unit_texts(support_ids, unit_lookup), sample.language)
+        prompt = _topic_prompt(prompt_chunks, compact_unit_texts(support_ids, unit_lookup), sample.language)
         topic_results.append(llm.summarize(prompt))
-        _trace_community_summary(trace, len(topic_results) - 1, topic_chunks, prompt, topic_results[-1])
+        _trace_community_summary(trace, len(topic_results) - 1, prompt_chunks, prompt, topic_results[-1])
     if len(topic_results) == 1:
         final = topic_results[0]
     else:
@@ -260,15 +271,69 @@ def _select_support(
 
 
 def _make_topics(chunks: list[Chunk], config: PipelineConfig) -> list[list[int]]:
-    return _build_communities(chunks, config)[0]
+    return _build_communities(chunks, config, ChunkDedupResult({}, {}, []))[0]
 
 
-def _build_communities(chunks: list[Chunk], config: PipelineConfig) -> tuple[list[list[int]], list[dict[str, float | int]]]:
+def _deduplicate_chunks(chunks: list[Chunk], config: PipelineConfig) -> ChunkDedupResult:
+    if not config.dedup_chunks:
+        return ChunkDedupResult({}, {}, [])
+    return build_chunk_duplicate_groups(
+        chunks,
+        threshold=config.dedup_sim_threshold,
+        require_shared_phrase=config.dedup_require_shared_phrase,
+    )
+
+
+def _build_communities(
+    chunks: list[Chunk],
+    config: PipelineConfig,
+    dedup_result: ChunkDedupResult,
+) -> tuple[list[list[int]], list[dict[str, float | int | str | bool]]]:
     if not config.use_graph:
         return [[idx] for idx in range(len(chunks))], []
-    edge_details = build_weighted_edge_details(chunks, config.graph_weights, k=config.k_neighbors)
+    edge_details = build_weighted_edge_details(
+        chunks,
+        config.graph_weights,
+        k=config.k_neighbors,
+        duplicate_group_by_index=dedup_result.group_for_index,
+        duplicate_edge_factor=config.duplicate_edge_factor,
+    )
     edges = [(int(edge["source_index"]), int(edge["target_index"]), float(edge["weight"])) for edge in edge_details]
     return cluster_chunks(chunks, edges), edge_details
+
+
+def _deduplicate_community_chunks(
+    topic_chunks: list[Chunk],
+    all_chunks: list[Chunk],
+    dedup_result: ChunkDedupResult,
+    config: PipelineConfig,
+    trace: PipelineTrace | None,
+    community_index: int,
+) -> list[Chunk]:
+    if not config.community_dedup or not dedup_result.groups:
+        return topic_chunks
+    index_by_chunk_id = {chunk.chunk_id: idx for idx, chunk in enumerate(all_chunks)}
+    community_indices = [index_by_chunk_id[chunk.chunk_id] for chunk in topic_chunks]
+    community_index_set = set(community_indices)
+    kept_indices: list[int] = []
+    skipped_indices: list[int] = []
+    seen_groups: set[str] = set()
+    for idx in community_indices:
+        group_id = dedup_result.group_id(idx)
+        if not group_id.startswith("dup_"):
+            kept_indices.append(idx)
+            continue
+        if group_id in seen_groups:
+            skipped_indices.append(idx)
+            continue
+        seen_groups.add(group_id)
+        representative = dedup_result.representative_index(idx)
+        kept_indices.append(representative if representative in community_index_set else idx)
+        if representative in community_index_set and representative != idx:
+            skipped_indices.append(idx)
+    _trace_community_dedup(trace, all_chunks, dedup_result, community_index, kept_indices, skipped_indices)
+    kept_chunks = [all_chunks[idx] for idx in sorted(dict.fromkeys(kept_indices), key=lambda item: (all_chunks[item].document_id, all_chunks[item].position))]
+    return kept_chunks or topic_chunks
 
 
 def _select_higher_level_support(
@@ -386,6 +451,27 @@ def _trace_chunks(trace: PipelineTrace | None, chunks: list[Chunk]) -> None:
             )
 
 
+def _trace_duplicate_groups(trace: PipelineTrace | None, chunks: list[Chunk], dedup_result: ChunkDedupResult) -> None:
+    if trace is None:
+        return
+    for group in dedup_result.groups:
+        representative = chunks[group.representative_index]
+        for member_index in group.member_indices:
+            member = chunks[member_index]
+            trace.duplicate_groups.append(
+                {
+                    "duplicate_group": group.group_id,
+                    "representative_chunk_id": representative.chunk_id,
+                    "chunk_id": member.chunk_id,
+                    "document_id": member.document_id,
+                    "position": member.position,
+                    "is_representative": member_index == group.representative_index,
+                    "similarity_to_representative": group.representative_similarity.get(member_index, 0.0),
+                    "text": member.text,
+                }
+            )
+
+
 def _trace_support(trace: PipelineTrace | None, support_by_chunk: dict[str, list[str]], unit_lookup: dict[str, TriSentenceUnit]) -> None:
     if trace is None:
         return
@@ -402,7 +488,7 @@ def _trace_support(trace: PipelineTrace | None, support_by_chunk: dict[str, list
             )
 
 
-def _trace_graph(trace: PipelineTrace | None, chunks: list[Chunk], edges: list[dict[str, float | int]]) -> None:
+def _trace_graph(trace: PipelineTrace | None, chunks: list[Chunk], edges: list[dict[str, float | int | str | bool]]) -> None:
     if trace is None:
         return
     for edge in edges:
@@ -414,13 +500,42 @@ def _trace_graph(trace: PipelineTrace | None, chunks: list[Chunk], edges: list[d
                 "target": chunks[right].chunk_id,
                 "source_index": left,
                 "target_index": right,
+                "duplicate_group": edge["duplicate_group"],
+                "is_duplicate_edge": edge["is_duplicate_edge"],
                 "position_similarity": edge["position_similarity"],
                 "entity_similarity": edge["entity_similarity"],
                 "content_similarity": edge["content_similarity"],
                 "position_weighted": edge["position_weighted"],
                 "entity_weighted": edge["entity_weighted"],
                 "content_weighted": edge["content_weighted"],
+                "weight_before_redundancy": edge["weight_before_redundancy"],
+                "redundancy_penalty": edge["redundancy_penalty"],
                 "weight": edge["weight"],
+            }
+        )
+
+
+def _trace_community_dedup(
+    trace: PipelineTrace | None,
+    chunks: list[Chunk],
+    dedup_result: ChunkDedupResult,
+    community_index: int,
+    kept_indices: list[int],
+    skipped_indices: list[int],
+) -> None:
+    if trace is None:
+        return
+    kept_set = set(kept_indices)
+    skipped_set = set(skipped_indices)
+    for idx in sorted(kept_set | skipped_set, key=lambda item: (chunks[item].document_id, chunks[item].position)):
+        trace.community_dedup.append(
+            {
+                "community_id": f"community_{community_index}",
+                "chunk_id": chunks[idx].chunk_id,
+                "duplicate_group": dedup_result.group_id(idx),
+                "representative_chunk_id": chunks[dedup_result.representative_index(idx)].chunk_id,
+                "action": "kept" if idx in kept_set else "skipped_duplicate",
+                "text": chunks[idx].text,
             }
         )
 

@@ -41,6 +41,11 @@ def main() -> None:
     parser.add_argument("--target-max-tokens", type=int, default=settings.target_max_tokens)
     parser.add_argument("--semantic-breakpoint-percentile", type=float, default=settings.semantic_breakpoint_percentile)
     parser.add_argument("--semantic-min-chunk-tokens", type=int, default=settings.semantic_min_chunk_tokens)
+    parser.add_argument("--dedup-chunks", action=argparse.BooleanOptionalAction, default=settings.dedup_chunks)
+    parser.add_argument("--dedup-sim-threshold", type=float, default=settings.dedup_sim_threshold)
+    parser.add_argument("--dedup-require-shared-phrase", action=argparse.BooleanOptionalAction, default=settings.dedup_require_shared_phrase)
+    parser.add_argument("--duplicate-edge-factor", type=float, default=settings.duplicate_edge_factor)
+    parser.add_argument("--community-dedup", action=argparse.BooleanOptionalAction, default=settings.community_dedup)
     parser.add_argument("--grid", action=argparse.BooleanOptionalAction, default=settings.grid, help="Run the alpha/beta/gamma graph-weight grid.")
     parser.add_argument("--alpha", type=float, default=settings.alpha)
     parser.add_argument("--beta", type=float, default=settings.beta)
@@ -78,6 +83,11 @@ def main() -> None:
                     "target_max_tokens": "",
                     "semantic_breakpoint_percentile": "",
                     "semantic_min_chunk_tokens": "",
+                    "dedup_chunks": "",
+                    "dedup_sim_threshold": "",
+                    "dedup_require_shared_phrase": "",
+                    "duplicate_edge_factor": "",
+                    "community_dedup": "",
                     "embedding_backend": "none",
                     "embedding_model": "none",
                     "llm": args.llm,
@@ -124,6 +134,11 @@ def main() -> None:
             target_max_tokens=args.target_max_tokens,
             semantic_breakpoint_percentile=args.semantic_breakpoint_percentile,
             semantic_min_chunk_tokens=args.semantic_min_chunk_tokens,
+            dedup_chunks=args.dedup_chunks,
+            dedup_sim_threshold=args.dedup_sim_threshold,
+            dedup_require_shared_phrase=args.dedup_require_shared_phrase,
+            duplicate_edge_factor=args.duplicate_edge_factor,
+            community_dedup=args.community_dedup,
             pacsum_beta=args.pacsum_beta,
             pacsum_lambda1=args.pacsum_lambda1,
             pacsum_lambda2=args.pacsum_lambda2,
@@ -149,6 +164,11 @@ def main() -> None:
                     "target_max_tokens": args.target_max_tokens,
                     "semantic_breakpoint_percentile": args.semantic_breakpoint_percentile,
                     "semantic_min_chunk_tokens": args.semantic_min_chunk_tokens or "",
+                    "dedup_chunks": args.dedup_chunks,
+                    "dedup_sim_threshold": args.dedup_sim_threshold,
+                    "dedup_require_shared_phrase": args.dedup_require_shared_phrase,
+                    "duplicate_edge_factor": args.duplicate_edge_factor,
+                    "community_dedup": args.community_dedup,
                     "embedding_backend": embedder.backend,
                     "embedding_model": embedder.model_name,
                     "llm": args.llm,

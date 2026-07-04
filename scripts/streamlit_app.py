@@ -79,6 +79,23 @@ def main() -> None:
                 value=env_experiment.semantic_min_chunk_tokens or max(100, env_experiment.target_min_tokens // 4),
                 step=25,
             )
+            dedup_chunks = st.checkbox("Detect duplicate chunks", value=env_experiment.dedup_chunks)
+            dedup_sim_threshold = st.number_input(
+                "Duplicate similarity threshold",
+                min_value=0.0,
+                max_value=1.0,
+                value=env_experiment.dedup_sim_threshold,
+                step=0.01,
+            )
+            dedup_require_shared_phrase = st.checkbox("Require shared phrase for duplicates", value=env_experiment.dedup_require_shared_phrase)
+            duplicate_edge_factor = st.number_input(
+                "Duplicate edge factor",
+                min_value=0.0,
+                max_value=1.0,
+                value=env_experiment.duplicate_edge_factor,
+                step=0.05,
+            )
+            community_dedup = st.checkbox("Deduplicate community prompts", value=env_experiment.community_dedup)
             dry_embed = st.checkbox(
                 "Dry embeddings",
                 value=env_experiment.dry_embed,
@@ -147,6 +164,11 @@ def main() -> None:
                     target_max_tokens=target_max_tokens,
                     semantic_breakpoint_percentile=semantic_breakpoint_percentile,
                     semantic_min_chunk_tokens=semantic_min_chunk_tokens,
+                    dedup_chunks=dedup_chunks,
+                    dedup_sim_threshold=dedup_sim_threshold,
+                    dedup_require_shared_phrase=dedup_require_shared_phrase,
+                    duplicate_edge_factor=duplicate_edge_factor,
+                    community_dedup=community_dedup,
                     pacsum_beta=pacsum_beta,
                     pacsum_lambda1=pacsum_lambda1,
                     pacsum_lambda2=pacsum_lambda2,
@@ -194,7 +216,7 @@ def _render_result(result: dict[str, object]) -> None:
     metric_cols[6].metric("Chunks", output.chunk_count)
     metric_cols[7].metric("Seconds", f"{result['runtime_seconds']:.2f}")
 
-    tabs = st.tabs(["Progress", "Segments", "Chunks & Entities", "Communities", "KNN Graph", "Summary Graph", "Final Summary"])
+    tabs = st.tabs(["Progress", "Segments", "Chunks & Entities", "Dedup", "Communities", "KNN Graph", "Summary Graph", "Final Summary"])
     with tabs[0]:
         _dataframe(trace.progress, "No progress events recorded.")
     with tabs[1]:
@@ -210,18 +232,23 @@ def _render_result(result: dict[str, object]) -> None:
         st.markdown("**Selected support segments**")
         _dataframe(trace.support, "No support segments recorded.")
     with tabs[3]:
+        st.markdown("**Duplicate chunk groups**")
+        _dataframe(trace.duplicate_groups, "No duplicate groups detected.")
+        st.markdown("**Community prompt deduplication**")
+        _dataframe(trace.community_dedup, "No community prompt deduplication rows recorded.")
+    with tabs[4]:
         _dataframe(trace.communities, "No chunk communities recorded.")
         _dataframe(trace.community_summaries, "No community summaries recorded.")
-    with tabs[4]:
+    with tabs[5]:
         _dataframe(trace.graph_edges, "No graph edges recorded.")
         if trace.graph_edges:
             st.graphviz_chart(_dot_from_weighted_edges(trace.graph_edges))
-    with tabs[5]:
+    with tabs[6]:
         _dataframe(trace.summary_graph_nodes, "No summary graph nodes recorded.")
         _dataframe(trace.summary_graph_edges, "No summary graph edges recorded.")
         if trace.summary_graph_nodes:
             st.graphviz_chart(_dot_from_summary_graph(trace.summary_graph_nodes, trace.summary_graph_edges))
-    with tabs[6]:
+    with tabs[7]:
         st.text_area("Generated summary", output.summary, height=320)
         _render_summary_steps(trace.summary_steps)
 
@@ -280,6 +307,8 @@ def _dot_from_weighted_edges(edges: list[dict[str, object]]) -> str:
     for edge in edges:
         label = (
             f"w={float(edge['weight']):.3f}\n"
+            f"pre={float(edge['weight_before_redundancy']):.3f}\n"
+            f"penalty={float(edge['redundancy_penalty']):.2f}\n"
             f"pos={float(edge['position_weighted']):.3f}\n"
             f"ent={float(edge['entity_weighted']):.3f}\n"
             f"content={float(edge['content_weighted']):.3f}"

@@ -51,7 +51,13 @@ def build_weighted_edges(chunks: list[Chunk], weights: GraphWeights, k: int = 8)
     ]
 
 
-def build_weighted_edge_details(chunks: list[Chunk], weights: GraphWeights, k: int = 8) -> list[dict[str, float | int]]:
+def build_weighted_edge_details(
+    chunks: list[Chunk],
+    weights: GraphWeights,
+    k: int = 8,
+    duplicate_group_by_index: dict[int, str] | None = None,
+    duplicate_edge_factor: float = 1.0,
+) -> list[dict[str, float | int | str | bool]]:
     if len(chunks) <= 1:
         return []
     embeddings = np.vstack([_normalize(np.asarray(chunk.embedding, dtype=float)) for chunk in chunks])
@@ -69,22 +75,35 @@ def build_weighted_edge_details(chunks: list[Chunk], weights: GraphWeights, k: i
         p = positional_similarity(chunks[i], chunks[j])
         e = phrase_similarity(chunks[i], chunks[j], phrase_idf)
         c = max(0.0, float(content[i, j]))
-        score = weights.alpha * p + weights.beta * e + weights.gamma * c
+        score_before_redundancy = weights.alpha * p + weights.beta * e + weights.gamma * c
+        duplicate_group = _shared_duplicate_group(duplicate_group_by_index or {}, i, j)
+        redundancy_penalty = duplicate_edge_factor if duplicate_group else 1.0
+        score = score_before_redundancy * redundancy_penalty
         if score > 0:
             edges.append(
                 {
                     "source_index": i,
                     "target_index": j,
+                    "duplicate_group": duplicate_group,
+                    "is_duplicate_edge": bool(duplicate_group),
                     "position_similarity": p,
                     "entity_similarity": e,
                     "content_similarity": c,
                     "position_weighted": weights.alpha * p,
                     "entity_weighted": weights.beta * e,
                     "content_weighted": weights.gamma * c,
+                    "weight_before_redundancy": score_before_redundancy,
+                    "redundancy_penalty": redundancy_penalty,
                     "weight": score,
                 }
             )
     return edges
+
+
+def _shared_duplicate_group(group_by_index: dict[int, str], left: int, right: int) -> str:
+    left_group = group_by_index.get(left, "")
+    right_group = group_by_index.get(right, "")
+    return left_group if left_group and left_group == right_group else ""
 
 
 def cluster_chunks(chunks: list[Chunk], edges: list[tuple[int, int, float]], resolution: float = 1.0) -> list[list[int]]:
