@@ -45,6 +45,13 @@ def weight_grid() -> list[GraphWeights]:
 
 
 def build_weighted_edges(chunks: list[Chunk], weights: GraphWeights, k: int = 8) -> list[tuple[int, int, float]]:
+    return [
+        (int(edge["source_index"]), int(edge["target_index"]), float(edge["weight"]))
+        for edge in build_weighted_edge_details(chunks, weights, k=k)
+    ]
+
+
+def build_weighted_edge_details(chunks: list[Chunk], weights: GraphWeights, k: int = 8) -> list[dict[str, float | int]]:
     if len(chunks) <= 1:
         return []
     embeddings = np.vstack([_normalize(np.asarray(chunk.embedding, dtype=float)) for chunk in chunks])
@@ -57,14 +64,26 @@ def build_weighted_edges(chunks: list[Chunk], weights: GraphWeights, k: int = 8)
             candidates.add(tuple(sorted((i, int(j)))))
         if i + 1 < len(chunks) and chunks[i].document_id == chunks[i + 1].document_id:
             candidates.add((i, i + 1))
-    edges = []
+    edges: list[dict[str, float | int]] = []
     for i, j in sorted(candidates):
         p = positional_similarity(chunks[i], chunks[j])
         e = phrase_similarity(chunks[i], chunks[j], phrase_idf)
         c = max(0.0, float(content[i, j]))
         score = weights.alpha * p + weights.beta * e + weights.gamma * c
         if score > 0:
-            edges.append((i, j, score))
+            edges.append(
+                {
+                    "source_index": i,
+                    "target_index": j,
+                    "position_similarity": p,
+                    "entity_similarity": e,
+                    "content_similarity": c,
+                    "position_weighted": weights.alpha * p,
+                    "entity_weighted": weights.beta * e,
+                    "content_weighted": weights.gamma * c,
+                    "weight": score,
+                }
+            )
     return edges
 
 

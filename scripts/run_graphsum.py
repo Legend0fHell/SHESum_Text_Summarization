@@ -11,6 +11,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from graphsum.aggregate import aggregate_result_frame
+from graphsum.config import experiment_settings
 from graphsum.data import load_samples
 from graphsum.evaluate import rouge_scores, write_csv
 from graphsum.graph import GraphWeights, weight_grid
@@ -19,33 +20,34 @@ from graphsum.pipeline import Embedder, PipelineConfig, run_direct_sample, run_s
 
 
 def main() -> None:
+    settings = experiment_settings()
     parser = argparse.ArgumentParser(description="Run graph-guided Extract-Support summarization experiments.")
-    parser.add_argument("--dataset", choices=["vn_mds", "vims", "multi_news"], required=True)
-    parser.add_argument("--data-root", default="datasets")
-    parser.add_argument("--limit", type=int, default=3)
-    parser.add_argument("--salience", choices=["e1", "e2a", "e2b"], default="e1")
-    parser.add_argument("--llm", choices=["dry_run", "openai_compatible"], default="dry_run")
+    parser.add_argument("--dataset", choices=["vn_mds", "vims", "multi_news"], required=settings.dataset is None, default=settings.dataset)
+    parser.add_argument("--data-root", default=settings.data_root)
+    parser.add_argument("--limit", type=int, default=settings.limit)
+    parser.add_argument("--salience", choices=["e1", "e2a", "e2b"], default=settings.salience)
+    parser.add_argument("--llm", choices=["dry_run", "openai_compatible"], default=settings.llm)
     parser.add_argument("--model", default=None)
     parser.add_argument("--base-url", default=None)
     parser.add_argument("--api-key", default=None)
     parser.add_argument("--temperature", type=float, default=None)
-    parser.add_argument("--dry-embed", action="store_true", help="Use hash embeddings instead of BGE-M3.")
+    parser.add_argument("--dry-embed", action=argparse.BooleanOptionalAction, default=settings.dry_embed, help="Use hash embeddings instead of BGE-M3.")
     parser.add_argument("--embedding-backend", choices=["sentence_transformers", "openai_compatible"], default=None)
     parser.add_argument("--embedding-model", default=None)
     parser.add_argument("--embedding-base-url", default=None)
     parser.add_argument("--embedding-api-key", default=None)
-    parser.add_argument("--chunking", choices=["semantic", "simple"], default="semantic")
-    parser.add_argument("--grid", action="store_true", help="Run the alpha/beta/gamma graph-weight grid.")
-    parser.add_argument("--alpha", type=float, default=0.10)
-    parser.add_argument("--beta", type=float, default=0.20)
-    parser.add_argument("--pacsum-beta", type=float, default=0.0)
-    parser.add_argument("--pacsum-lambda1", type=float, default=0.0)
-    parser.add_argument("--pacsum-lambda2", type=float, default=1.0)
-    parser.add_argument("--entity-merge-threshold", type=float, default=0.85)
-    parser.add_argument("--no-graph", action="store_true", help="Sequential hierarchical baseline without graph clustering.")
-    parser.add_argument("--pure-llm", action="store_true", help="Direct baseline: feed all source text to the LLM without graph, chunking, support selection, or embeddings.")
-    parser.add_argument("--aggregate-output", default=None, help="Optional aggregate metrics CSV. Defaults to <output>_summary.csv for openai_compatible runs.")
-    parser.add_argument("--output", default="runs/graphsum_results.csv")
+    parser.add_argument("--chunking", choices=["semantic", "simple"], default=settings.chunking)
+    parser.add_argument("--grid", action=argparse.BooleanOptionalAction, default=settings.grid, help="Run the alpha/beta/gamma graph-weight grid.")
+    parser.add_argument("--alpha", type=float, default=settings.alpha)
+    parser.add_argument("--beta", type=float, default=settings.beta)
+    parser.add_argument("--pacsum-beta", type=float, default=settings.pacsum_beta)
+    parser.add_argument("--pacsum-lambda1", type=float, default=settings.pacsum_lambda1)
+    parser.add_argument("--pacsum-lambda2", type=float, default=settings.pacsum_lambda2)
+    parser.add_argument("--entity-merge-threshold", type=float, default=settings.entity_merge_threshold)
+    parser.add_argument("--no-graph", action=argparse.BooleanOptionalAction, default=settings.no_graph, help="Sequential hierarchical baseline without graph clustering.")
+    parser.add_argument("--pure-llm", action=argparse.BooleanOptionalAction, default=settings.pure_llm, help="Direct baseline: feed all source text to the LLM without graph, chunking, support selection, or embeddings.")
+    parser.add_argument("--aggregate-output", default=settings.aggregate_output, help="Optional aggregate metrics CSV. Defaults to <output>_summary.csv for openai_compatible runs.")
+    parser.add_argument("--output", default=settings.output)
     args = parser.parse_args()
 
     samples = load_samples(args.dataset, args.data_root, limit=args.limit)

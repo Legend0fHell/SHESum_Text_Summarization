@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import time
+from html import escape
 from pathlib import Path
 
 import pandas as pd
@@ -10,6 +11,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from graphsum.data import load_samples
+from graphsum.config import embedding_settings, experiment_settings, llm_settings
 from graphsum.evaluate import rouge_scores
 from graphsum.graph import GraphWeights
 from graphsum.llm import make_llm
@@ -23,41 +25,64 @@ def main() -> None:
     st.set_page_config(page_title="GraphSum Sample Viewer", layout="wide")
     st.title("GraphSum Sample Viewer")
     st.caption("Run one sample and inspect segments, chunk communities, graph edges, entities, summary graph, and generated summary.")
+    env_llm = llm_settings()
+    env_embedding = embedding_settings()
+    env_experiment = experiment_settings()
 
     with st.sidebar:
         st.header("Sample")
-        dataset = st.selectbox("Dataset", ["vn_mds", "vims", "multi_news"])
-        data_root = st.text_input("Data root", "datasets")
-        preview_limit = st.number_input("Samples to load", min_value=1, max_value=500, value=20, step=1)
+        dataset_options = ["vn_mds", "vims", "multi_news"]
+        dataset = st.selectbox(
+            "Dataset",
+            dataset_options,
+            index=dataset_options.index(env_experiment.dataset) if env_experiment.dataset in dataset_options else 0,
+        )
+        data_root = st.text_input("Data root", env_experiment.data_root)
+        preview_limit = st.number_input("Samples to load", min_value=1, max_value=500, value=max(1, env_experiment.limit), step=1)
 
         samples = load_samples(dataset, data_root, limit=int(preview_limit))
         sample_labels = [f"{sample.sample_id} ({len(sample.documents)} docs, {len(sample.references)} refs)" for sample in samples]
         sample_index = st.selectbox("Sample", range(len(samples)), format_func=lambda idx: sample_labels[idx]) if samples else None
 
         st.header("Run Mode")
-        run_mode = st.selectbox("Mode", ["graphsum", "pure_llm"])
-        llm_kind = st.selectbox("LLM", ["dry_run", "openai_compatible"])
-        model = st.text_input("LLM model", "")
-        base_url = st.text_input("LLM base URL", "")
-        api_key = st.text_input("LLM API key", "", type="password")
-        temperature = st.number_input("Temperature", min_value=0.0, max_value=2.0, value=0.0, step=0.1)
+        st.caption("Defaults are loaded from the root `.env`; non-empty sidebar fields override them for this run.")
+        run_mode_options = ["graphsum", "pure_llm"]
+        run_mode_default = "pure_llm" if env_experiment.pure_llm else "graphsum"
+        run_mode = st.selectbox("Mode", run_mode_options, index=run_mode_options.index(run_mode_default))
+        llm_options = ["dry_run", "openai_compatible"]
+        llm_kind = st.selectbox("LLM", llm_options, index=llm_options.index(env_experiment.llm) if env_experiment.llm in llm_options else 0)
+        model = st.text_input("LLM model", env_llm.model or "")
+        base_url = st.text_input("LLM base URL", env_llm.base_url or "")
+        api_key = st.text_input("LLM API key override", "", type="password")
+        temperature = st.number_input("Temperature", min_value=0.0, max_value=2.0, value=float(env_llm.temperature), step=0.1)
 
         if run_mode == "graphsum":
             st.header("GraphSum Config")
-            salience = st.selectbox("Salience", ["e1", "e2a", "e2b"])
-            use_graph = not st.checkbox("Disable graph clustering", value=False)
-            chunking = st.selectbox("Chunking", ["semantic", "simple"])
-            dry_embed = st.checkbox("Dry embeddings", value=llm_kind == "dry_run")
-            embedding_backend = st.selectbox("Embedding backend", ["sentence_transformers", "openai_compatible"])
-            embedding_model = st.text_input("Embedding model", "")
-            embedding_base_url = st.text_input("Embedding base URL", "")
-            embedding_api_key = st.text_input("Embedding API key", "", type="password")
-            alpha = st.number_input("alpha", min_value=0.0, max_value=1.0, value=0.10, step=0.05)
-            beta = st.number_input("beta", min_value=0.0, max_value=1.0, value=0.20, step=0.05)
-            pacsum_beta = st.number_input("PACSUM beta", value=0.0, step=0.1)
-            pacsum_lambda1 = st.number_input("PACSUM lambda1", value=0.0, step=0.1)
-            pacsum_lambda2 = st.number_input("PACSUM lambda2", value=1.0, step=0.1)
-            entity_merge_threshold = st.number_input("Entity merge threshold", min_value=0.0, max_value=1.0, value=0.85, step=0.01)
+            salience_options = ["e1", "e2a", "e2b"]
+            salience = st.selectbox("Salience", salience_options, index=salience_options.index(env_experiment.salience) if env_experiment.salience in salience_options else 0)
+            use_graph = not st.checkbox("Disable graph clustering", value=env_experiment.no_graph)
+            chunking_options = ["semantic", "simple"]
+            chunking = st.selectbox("Chunking", chunking_options, index=chunking_options.index(env_experiment.chunking) if env_experiment.chunking in chunking_options else 0)
+            dry_embed = st.checkbox(
+                "Dry embeddings",
+                value=env_experiment.dry_embed,
+                help="Use deterministic hash embeddings for debugging only. Leave off to use the embedding backend from `.env` or the sidebar.",
+            )
+            embedding_backends = ["sentence_transformers", "openai_compatible"]
+            embedding_backend = st.selectbox(
+                "Embedding backend",
+                embedding_backends,
+                index=embedding_backends.index(env_embedding.backend) if env_embedding.backend in embedding_backends else 0,
+            )
+            embedding_model = st.text_input("Embedding model", env_embedding.model or "")
+            embedding_base_url = st.text_input("Embedding base URL", env_embedding.base_url or "")
+            embedding_api_key = st.text_input("Embedding API key override", "", type="password")
+            alpha = st.number_input("alpha", min_value=0.0, max_value=1.0, value=env_experiment.alpha, step=0.05)
+            beta = st.number_input("beta", min_value=0.0, max_value=1.0, value=env_experiment.beta, step=0.05)
+            pacsum_beta = st.number_input("PACSUM beta", value=env_experiment.pacsum_beta, step=0.1)
+            pacsum_lambda1 = st.number_input("PACSUM lambda1", value=env_experiment.pacsum_lambda1, step=0.1)
+            pacsum_lambda2 = st.number_input("PACSUM lambda2", value=env_experiment.pacsum_lambda2, step=0.1)
+            entity_merge_threshold = st.number_input("Entity merge threshold", min_value=0.0, max_value=1.0, value=env_experiment.entity_merge_threshold, step=0.01)
 
         run_clicked = st.button("Run Sample", type="primary", disabled=sample_index is None)
 
@@ -65,8 +90,11 @@ def main() -> None:
         st.warning("No samples loaded. Check dataset and data root.")
         return
 
+    selected_sample = samples[int(sample_index)] if sample_index is not None else None
+    current_selection_key = f"{dataset}:{data_root}:{selected_sample.sample_id}:{run_mode}" if selected_sample is not None else ""
+
     if run_clicked:
-        sample = samples[int(sample_index)]
+        sample = selected_sample
         progress_bar = st.progress(0)
         status = st.empty()
         trace = PipelineTrace()
@@ -108,6 +136,7 @@ def main() -> None:
             runtime_seconds = time.perf_counter() - started
             rouge = rouge_scores(output.summary, sample.references)
             st.session_state["viewer_result"] = {
+                "selection_key": current_selection_key,
                 "sample_id": sample.sample_id,
                 "run_mode": run_mode,
                 "runtime_seconds": runtime_seconds,
@@ -123,7 +152,10 @@ def main() -> None:
 
     result = st.session_state.get("viewer_result")
     if result:
-        _render_result(result)
+        if result.get("selection_key") == current_selection_key:
+            _render_result(result)
+        else:
+            st.info("The sidebar selection changed. Click `Run Sample` to generate results for the selected sample.")
 
 
 def _render_result(result: dict[str, object]) -> None:
@@ -171,13 +203,50 @@ def _render_result(result: dict[str, object]) -> None:
             st.graphviz_chart(_dot_from_summary_graph(trace.summary_graph_nodes, trace.summary_graph_edges))
     with tabs[6]:
         st.text_area("Generated summary", output.summary, height=320)
+        _render_summary_steps(trace.summary_steps)
 
 
 def _dataframe(rows: list[dict[str, object]], empty_message: str) -> None:
     if not rows:
         st.info(empty_message)
         return
-    st.dataframe(pd.DataFrame(rows), use_container_width=True)
+    st.markdown(_wrapped_table_html(pd.DataFrame(rows)), unsafe_allow_html=True)
+
+
+def _render_summary_steps(rows: list[dict[str, object]]) -> None:
+    if not rows:
+        st.info("No prompts recorded.")
+        return
+    st.markdown("**Prompt and result trace**")
+    for row in rows:
+        label = f"{row['step_id']} ({row['step_type']}, input={row['input_tokens']}, output={row['output_tokens']})"
+        with st.expander(label, expanded=False):
+            st.text_area("Input prompt", str(row["prompt"]), height=260, key=f"prompt_{row['step_id']}")
+            st.text_area("Step result", str(row["summary"]), height=180, key=f"summary_{row['step_id']}")
+
+
+def _wrapped_table_html(frame: pd.DataFrame) -> str:
+    columns = list(frame.columns)
+    header = "".join(f"<th>{escape(str(column))}</th>" for column in columns)
+    body_rows = []
+    for _, row in frame.iterrows():
+        cells = "".join(f"<td>{escape(str(row[column]))}</td>" for column in columns)
+        body_rows.append(f"<tr>{cells}</tr>")
+    return """
+<style>
+.wrapped-table table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.wrapped-table th, .wrapped-table td {
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  padding: 0.35rem;
+  vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.wrapped-table th { font-weight: 600; background: rgba(128, 128, 128, 0.12); }
+</style>
+<div class="wrapped-table"><table><thead><tr>
+""" + header + "</tr></thead><tbody>" + "".join(body_rows) + "</tbody></table></div>"
 
 
 def _stage_progress(stage: str) -> float:
@@ -189,7 +258,12 @@ def _stage_progress(stage: str) -> float:
 def _dot_from_weighted_edges(edges: list[dict[str, object]]) -> str:
     lines = ["graph G {", "  graph [overlap=false, splines=true];", "  node [shape=box, style=rounded];"]
     for edge in edges:
-        label = f"{float(edge['weight']):.3f}"
+        label = (
+            f"w={float(edge['weight']):.3f}\n"
+            f"pos={float(edge['position_weighted']):.3f}\n"
+            f"ent={float(edge['entity_weighted']):.3f}\n"
+            f"content={float(edge['content_weighted']):.3f}"
+        )
         lines.append(f"  {_quote(edge['source'])} -- {_quote(edge['target'])} [label={_quote(label)}];")
     lines.append("}")
     return "\n".join(lines)

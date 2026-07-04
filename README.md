@@ -23,7 +23,7 @@ Entity/factual phrase extraction runs at chunk level. Raw chunk named entities a
 
 ## Model Configuration
 
-Runtime defaults live in `graphsum/config.py`. A root `.env` file is loaded automatically if present, environment variables override code defaults, and CLI flags override both. Use `.env.example` as the template for local endpoint settings.
+Runtime defaults live in `graphsum/config.py`. A root `.env` file is loaded automatically if present, environment variables override code defaults, and CLI/sidebar values override both. Use `.env.example` as the template for endpoint settings and experiment defaults.
 
 Embedding settings:
 
@@ -37,11 +37,14 @@ $env:GRAPHSUM_EMBEDDING_API_KEY="ollama"
 Summarization LLM settings:
 
 ```powershell
+$env:GRAPHSUM_LLM_BACKEND="openai_compatible"
 $env:GRAPHSUM_LLM_MODEL="Qwen3.6-35B"
 $env:GRAPHSUM_LLM_BASE_URL="http://localhost:8000/v1"
 $env:GRAPHSUM_LLM_API_KEY="ollama"
 $env:GRAPHSUM_LLM_TEMPERATURE="0.0"
 ```
+
+Experiment defaults can also be set through `.env`, including `GRAPHSUM_DATASET`, `GRAPHSUM_LIMIT`, `GRAPHSUM_SALIENCE`, `GRAPHSUM_CHUNKING`, `GRAPHSUM_NO_GRAPH`, `GRAPHSUM_PURE_LLM`, `GRAPHSUM_ALPHA`, `GRAPHSUM_BETA`, PACSUM settings, `GRAPHSUM_ENTITY_MERGE_THRESHOLD`, `GRAPHSUM_OUTPUT`, and `GRAPHSUM_AGGREGATE_OUTPUT`.
 
 Equivalent CLI overrides:
 

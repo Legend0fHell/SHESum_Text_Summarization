@@ -26,6 +26,28 @@ class LLMSettings:
     temperature: float
 
 
+@dataclass(frozen=True)
+class ExperimentSettings:
+    dataset: str | None
+    data_root: str
+    limit: int
+    salience: str
+    llm: str
+    dry_embed: bool
+    chunking: str
+    grid: bool
+    alpha: float
+    beta: float
+    pacsum_beta: float
+    pacsum_lambda1: float
+    pacsum_lambda2: float
+    entity_merge_threshold: float
+    no_graph: bool
+    pure_llm: bool
+    output: str
+    aggregate_output: str | None
+
+
 def embedding_settings() -> EmbeddingSettings:
     return EmbeddingSettings(
         backend=os.environ.get("GRAPHSUM_EMBEDDING_BACKEND", "sentence_transformers"),
@@ -42,3 +64,47 @@ def llm_settings() -> LLMSettings:
         api_key=os.environ.get("GRAPHSUM_LLM_API_KEY") or os.environ.get("OPENAI_API_KEY") or "ollama",
         temperature=float(os.environ.get("GRAPHSUM_LLM_TEMPERATURE", "0.0")),
     )
+
+
+def experiment_settings() -> ExperimentSettings:
+    return ExperimentSettings(
+        dataset=_empty_to_none(os.environ.get("GRAPHSUM_DATASET")),
+        data_root=os.environ.get("GRAPHSUM_DATA_ROOT", "datasets"),
+        limit=_int_env("GRAPHSUM_LIMIT", 3),
+        salience=os.environ.get("GRAPHSUM_SALIENCE", "e1"),
+        llm=os.environ.get("GRAPHSUM_LLM_BACKEND", "dry_run"),
+        dry_embed=_bool_env("GRAPHSUM_DRY_EMBED", False),
+        chunking=os.environ.get("GRAPHSUM_CHUNKING", "semantic"),
+        grid=_bool_env("GRAPHSUM_GRID", False),
+        alpha=_float_env("GRAPHSUM_ALPHA", 0.10),
+        beta=_float_env("GRAPHSUM_BETA", 0.20),
+        pacsum_beta=_float_env("GRAPHSUM_PACSUM_BETA", 0.0),
+        pacsum_lambda1=_float_env("GRAPHSUM_PACSUM_LAMBDA1", 0.0),
+        pacsum_lambda2=_float_env("GRAPHSUM_PACSUM_LAMBDA2", 1.0),
+        entity_merge_threshold=_float_env("GRAPHSUM_ENTITY_MERGE_THRESHOLD", 0.85),
+        no_graph=_bool_env("GRAPHSUM_NO_GRAPH", False),
+        pure_llm=_bool_env("GRAPHSUM_PURE_LLM", False),
+        output=os.environ.get("GRAPHSUM_OUTPUT", "runs/graphsum_results.csv"),
+        aggregate_output=_empty_to_none(os.environ.get("GRAPHSUM_AGGREGATE_OUTPUT")),
+    )
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None or value.strip() == "":
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _int_env(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    return int(value) if value not in {None, ""} else default
+
+
+def _float_env(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    return float(value) if value not in {None, ""} else default
+
+
+def _empty_to_none(value: str | None) -> str | None:
+    return value if value and value.strip() else None

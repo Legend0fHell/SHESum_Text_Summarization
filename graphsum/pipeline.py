@@ -9,7 +9,7 @@ import numpy as np
 from .config import embedding_settings
 from .data import Document, Sample
 from .entities import canonicalize_phrase_maps, extract_phrase_map
-from .graph import GraphWeights, build_weighted_edges, cluster_chunks
+from .graph import GraphWeights, build_weighted_edge_details, cluster_chunks
 from .llm import BaseLLM, LLMResult, count_tokens
 from .chunking import make_chunks
 from .preprocess import Chunk, TriSentenceUnit, make_sentences, make_tri_units
@@ -55,6 +55,7 @@ class PipelineTrace:
     graph_edges: list[dict[str, object]] = field(default_factory=list)
     communities: list[dict[str, object]] = field(default_factory=list)
     community_summaries: list[dict[str, object]] = field(default_factory=list)
+    summary_steps: list[dict[str, object]] = field(default_factory=list)
     summary_graph_nodes: list[dict[str, object]] = field(default_factory=list)
     summary_graph_edges: list[dict[str, object]] = field(default_factory=list)
     final_summary: str = ""
@@ -165,7 +166,7 @@ def run_sample(
         topic_support_ids.append(support_ids)
         prompt = _topic_prompt(topic_chunks, compact_unit_texts(support_ids, unit_lookup), sample.language)
         topic_results.append(llm.summarize(prompt))
-        _trace_community_summary(trace, len(topic_results) - 1, topic_chunks, topic_results[-1])
+        _trace_community_summary(trace, len(topic_results) - 1, topic_chunks, prompt, topic_results[-1])
     if len(topic_results) == 1:
         final = topic_results[0]
     else:
@@ -173,10 +174,12 @@ def run_sample(
         merged = "\n".join(result.text for result in topic_results)
         support_pool_ids = _select_higher_level_support(topic_support_ids, unit_lookup, merged, embedder, config)
         support_pool = compact_unit_texts(support_pool_ids, unit_lookup, max_tokens=config.evidence_max_tokens)
-        final = llm.summarize(_merge_prompt(merged, support_pool, sample.language))
+        merge_prompt = _merge_prompt(merged, support_pool, sample.language)
+        final = llm.summarize(merge_prompt)
         final.input_tokens += sum(result.input_tokens for result in topic_results)
         final.output_tokens += sum(result.output_tokens for result in topic_results)
         final.calls += sum(result.calls for result in topic_results)
+        _trace_summary_step(trace, "merge", "final_merge", merge_prompt, final)
     _trace_summary_graph(trace, chunks, topics, final.text)
     _record_progress(trace, progress_callback, "done", "Finished summarization")
     return PipelineOutput(final.text, final.input_tokens, final.output_tokens, final.calls, len(chunks), len(topics), trace)
@@ -190,10 +193,12 @@ def run_direct_sample(
 ) -> PipelineOutput:
     _record_progress(trace, progress_callback, "direct", "Sending all source documents directly to the LLM")
     source_text = "\n\n".join(_document_block(index, document) for index, document in enumerate(sample.documents, start=1))
-    result = llm.summarize(render_direct_prompt(source_text, sample.language))
+    prompt = render_direct_prompt(source_text, sample.language)
+    result = llm.summarize(prompt)
     if trace is not None:
         trace.final_summary = result.text
         trace.summary_graph_nodes.append({"node_id": "direct_llm", "kind": "direct_llm", "label": "Direct LLM"})
+        _trace_summary_step(trace, "direct", "direct_llm", prompt, result)
     _record_progress(trace, progress_callback, "done", "Finished direct summarization")
     return PipelineOutput(result.text, result.input_tokens, result.output_tokens, result.calls, len(sample.documents), 1, trace)
 
@@ -254,11 +259,12 @@ def _make_topics(chunks: list[Chunk], config: PipelineConfig) -> list[list[int]]
     return _build_communities(chunks, config)[0]
 
 
-def _build_communities(chunks: list[Chunk], config: PipelineConfig) -> tuple[list[list[int]], list[tuple[int, int, float]]]:
+def _build_communities(chunks: list[Chunk], config: PipelineConfig) -> tuple[list[list[int]], list[dict[str, float | int]]]:
     if not config.use_graph:
         return [[idx] for idx in range(len(chunks))], []
-    edges = build_weighted_edges(chunks, config.graph_weights, k=config.k_neighbors)
-    return cluster_chunks(chunks, edges), edges
+    edge_details = build_weighted_edge_details(chunks, config.graph_weights, k=config.k_neighbors)
+    edges = [(int(edge["source_index"]), int(edge["target_index"]), float(edge["weight"])) for edge in edge_details]
+    return cluster_chunks(chunks, edges), edge_details
 
 
 def _select_higher_level_support(
@@ -392,17 +398,25 @@ def _trace_support(trace: PipelineTrace | None, support_by_chunk: dict[str, list
             )
 
 
-def _trace_graph(trace: PipelineTrace | None, chunks: list[Chunk], edges: list[tuple[int, int, float]]) -> None:
+def _trace_graph(trace: PipelineTrace | None, chunks: list[Chunk], edges: list[dict[str, float | int]]) -> None:
     if trace is None:
         return
-    for left, right, weight in edges:
+    for edge in edges:
+        left = int(edge["source_index"])
+        right = int(edge["target_index"])
         trace.graph_edges.append(
             {
                 "source": chunks[left].chunk_id,
                 "target": chunks[right].chunk_id,
                 "source_index": left,
                 "target_index": right,
-                "weight": weight,
+                "position_similarity": edge["position_similarity"],
+                "entity_similarity": edge["entity_similarity"],
+                "content_similarity": edge["content_similarity"],
+                "position_weighted": edge["position_weighted"],
+                "entity_weighted": edge["entity_weighted"],
+                "content_weighted": edge["content_weighted"],
+                "weight": edge["weight"],
             }
         )
 
@@ -425,15 +439,33 @@ def _trace_communities(trace: PipelineTrace | None, chunks: list[Chunk], communi
             )
 
 
-def _trace_community_summary(trace: PipelineTrace | None, community_index: int, chunks: list[Chunk], result: LLMResult) -> None:
+def _trace_community_summary(trace: PipelineTrace | None, community_index: int, chunks: list[Chunk], prompt: str, result: LLMResult) -> None:
     if trace is None:
         return
+    step_id = f"community_{community_index}"
     trace.community_summaries.append(
         {
-            "community_id": f"community_{community_index}",
+            "community_id": step_id,
             "chunk_ids": ", ".join(chunk.chunk_id for chunk in chunks),
             "input_tokens": result.input_tokens,
             "output_tokens": result.output_tokens,
+            "prompt": prompt,
+            "summary": result.text,
+        }
+    )
+    _trace_summary_step(trace, "community", step_id, prompt, result)
+
+
+def _trace_summary_step(trace: PipelineTrace | None, step_type: str, step_id: str, prompt: str, result: LLMResult) -> None:
+    if trace is None:
+        return
+    trace.summary_steps.append(
+        {
+            "step_id": step_id,
+            "step_type": step_type,
+            "input_tokens": result.input_tokens,
+            "output_tokens": result.output_tokens,
+            "prompt": prompt,
             "summary": result.text,
         }
     )
