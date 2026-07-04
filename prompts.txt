@@ -23,6 +23,11 @@ the "numeric facts" in entity extraction does not need to be that specific. just
 remember dont frame to MoA. we take inspiration, not directly compete! if possible, we would want to compare it as baseline in Experiments part.
 for the LLM, i can provide you with Qwen3.6-35B (Qwen team), and/or Gemma4-12B (Google). 
 
+
+define what is topic?
+define new tri-sentences -> segment/chunk -- sentence-like
+
+
 ============ BEGIN OF CONVERSATION ============
 
 [[USER]]

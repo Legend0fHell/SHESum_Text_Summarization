@@ -6,8 +6,11 @@ import sys
 import time
 from pathlib import Path
 
+import pandas as pd
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from graphsum.aggregate import aggregate_result_frame
 from graphsum.data import load_samples
 from graphsum.evaluate import rouge_scores, write_csv
 from graphsum.graph import GraphWeights, weight_grid
@@ -41,6 +44,7 @@ def main() -> None:
     parser.add_argument("--entity-merge-threshold", type=float, default=0.85)
     parser.add_argument("--no-graph", action="store_true", help="Sequential hierarchical baseline without graph clustering.")
     parser.add_argument("--pure-llm", action="store_true", help="Direct baseline: feed all source text to the LLM without graph, chunking, support selection, or embeddings.")
+    parser.add_argument("--aggregate-output", default=None, help="Optional aggregate metrics CSV. Defaults to <output>_summary.csv for openai_compatible runs.")
     parser.add_argument("--output", default="runs/graphsum_results.csv")
     args = parser.parse_args()
 
@@ -89,7 +93,7 @@ def main() -> None:
                 }
             )
             _print_row(rows[-1])
-        write_csv(Path(args.output), rows)
+        _write_outputs(Path(args.output), rows, args.aggregate_output, args.llm)
         return
 
     embedder = Embedder(
@@ -152,11 +156,27 @@ def main() -> None:
                 }
             )
             _print_row(rows[-1])
-    write_csv(Path(args.output), rows)
+    _write_outputs(Path(args.output), rows, args.aggregate_output, args.llm)
 
 
 def _print_row(row: dict[str, object]) -> None:
     print(json.dumps(row, ensure_ascii=True))
+
+
+def _write_outputs(output_path: Path, rows: list[dict[str, object]], aggregate_output: str | None, llm_kind: str) -> None:
+    write_csv(output_path, rows)
+    summary_path = Path(aggregate_output) if aggregate_output else _default_summary_path(output_path, llm_kind)
+    if summary_path is None:
+        return
+    summary_rows = aggregate_result_frame(pd.DataFrame(rows))
+    write_csv(summary_path, summary_rows)
+    print(json.dumps({"aggregate_output": str(summary_path)}, ensure_ascii=True))
+
+
+def _default_summary_path(output_path: Path, llm_kind: str) -> Path | None:
+    if llm_kind != "openai_compatible":
+        return None
+    return output_path.with_name(f"{output_path.stem}_summary{output_path.suffix}")
 
 
 if __name__ == "__main__":

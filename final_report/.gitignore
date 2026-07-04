@@ -1,0 +1,13 @@
+*.aux
+*.blg
+*.loa
+*.lof
+*.log
+*.lot
+*.out
+*.synctex*
+*.bbl
+*.fdb_*
+*.fls
+
+acl_latex.pdf

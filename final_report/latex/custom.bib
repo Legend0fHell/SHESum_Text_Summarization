@@ -1,0 +1,180 @@
+@article{traag-2019-leiden,
+   title={From Louvain to Leiden: guaranteeing well-connected communities},
+   volume={9},
+   ISSN={2045-2322},
+   url={http://dx.doi.org/10.1038/s41598-019-41695-z},
+   DOI={10.1038/s41598-019-41695-z},
+   number={1},
+   journal={Scientific Reports},
+   publisher={Springer Science and Business Media LLC},
+   author={Traag, V. A. and Waltman, L. and van Eck, N. J.},
+   year={2019},
+   month=Mar }
+
+
+@inproceedings{zheng-lapata-2019-pacsum,
+    title = "Sentence Centrality Revisited for Unsupervised Summarization",
+    author = "Zheng, Hao  and
+      Lapata, Mirella",
+    editor = "Korhonen, Anna  and
+      Traum, David  and
+      M{\`a}rquez, Llu{\'i}s",
+    booktitle = "Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics",
+    month = jul,
+    year = "2019",
+    address = "Florence, Italy",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/P19-1628/",
+    doi = "10.18653/v1/P19-1628",
+    pages = "6236--6247",
+    abstract = "Single document summarization has enjoyed renewed interest in recent years thanks to the popularity of neural network models and the availability of large-scale datasets. In this paper we develop an unsupervised approach arguing that it is unrealistic to expect large-scale and high-quality training data to be available or created for different types of summaries, domains, or languages. We revisit a popular graph-based ranking algorithm and modify how node (aka sentence) centrality is computed in two ways: (a) we employ BERT, a state-of-the-art neural representation learning model to better capture sentential meaning and (b) we build graphs with directed edges arguing that the contribution of any two nodes to their respective centrality is influenced by their relative position in a document. Experimental results on three news summarization datasets representative of different languages and writing styles show that our approach outperforms strong baselines by a wide margin."
+}
+
+@inproceedings{ou-lapata-2025-hierarchical,
+    title = "Context-Aware Hierarchical Merging for Long Document Summarization",
+    author = "Ou, Litu  and
+      Lapata, Mirella",
+    editor = "Che, Wanxiang  and
+      Nabende, Joyce  and
+      Shutova, Ekaterina  and
+      Pilehvar, Mohammad Taher",
+    booktitle = "Findings of the Association for Computational Linguistics: ACL 2025",
+    month = jul,
+    year = "2025",
+    address = "Vienna, Austria",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2025.findings-acl.289/",
+    doi = "10.18653/v1/2025.findings-acl.289",
+    pages = "5534--5561",
+    ISBN = "979-8-89176-256-5",
+    abstract = "Hierarchical Merging is a technique commonly used to summarize very long texts ({\ensuremath{>}}100K tokens) by breaking down the input into smaller sections, summarizing those sections individually, and then merging or combining those summaries into a final coherent summary. Although it helps address the limitations of large language models (LLMs) with fixed input length constraints, the recursive merging process can amplify LLM hallucinations, increasing the risk of factual inaccuracies. In this paper, we seek to mitigate hallucinations by enriching hierarchical merging with context from the source document. Specifically, we propose different approaches to contextual augmentation ranging from *replacing* intermediate summaries with relevant input context, to *refining* them while using the context as supporting evidence, and *aligning* them implicitly (via citations) to the input. Experimental results on datasets representing legal and narrative domains show that contextual augmentation consistently outperforms zero-shot and hierarchical merging baselines for the Llama 3.1 model family. Our analysis further reveals that refinement methods tend to perform best when paired with extractive summarization for identifying relevant input."
+}
+
+@misc{zhao-2025-e2graphrag,
+      title={{E}$^2${GraphRAG}: Streamlining Graph-based RAG for High Efficiency and Effectiveness}, 
+      author={Yibo Zhao and Jiapeng Zhu and Ye Guo and Kangkang He and Xiang Li},
+      year={2025},
+      eprint={2505.24226},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2505.24226}, 
+}
+
+@inproceedings{ashkenazi-2025-d2cs,
+    title = "{D}2{CS} - Documents Graph Clustering using {LLM} supervision",
+    author = "Ashkenazi, Yoel  and
+      Harari, Etzion  and
+      Imra, Regev Yehezkel  and
+      Abudarham, Naphtali  and
+      Cohen, Dekel  and
+      Louzoun, Yoram",
+    editor = "Christodoulopoulos, Christos  and
+      Chakraborty, Tanmoy  and
+      Rose, Carolyn  and
+      Peng, Violet",
+    booktitle = "Findings of the Association for Computational Linguistics: EMNLP 2025",
+    month = nov,
+    year = "2025",
+    address = "Suzhou, China",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2025.findings-emnlp.1283/",
+    doi = "10.18653/v1/2025.findings-emnlp.1283",
+    pages = "23606--23623",
+    ISBN = "979-8-89176-335-7",
+    abstract = "Knowledge discovery from large-scale, heterogeneous textual corpora presents a significant challenge. Document clustering offers a practical solution by organizing unstructured texts into coherent groups based on content and thematic similarity. However, clustering does not inherently ensure thematic consistency. Here, we propose a novel framework that constructs a similarity graph over document embeddings and applies iterative graph-based clustering algorithms to partition the corpus into initial clusters. To overcome the limitations of conventional methods in producing semantically consistent clusters, we incorporate iterative feedback from a large language model (LLM) to guide the refinement process. The LLM is used to assess cluster quality and adjust edge weights within the graph, promoting better intra-cluster cohesion and inter-cluster separation. The LLM guidance is based on a set of success Rate metrics that we developed to measure the semantic coherence of clusters. Experimental results on multiple benchmark datasets demonstrate that the iterative process and additional user-supplied a priori edges improve the summaries' consistency and fluency, highlighting the importance of known connections among the documents. The removal of very rare or very frequent sentences has a mixed effect on the quality scores.Our full code is available here: \url{https://github.com/D2CS-sub/D2CS}"
+}
+
+@article{chen-2025-cothssum,
+author = {Chen, Xiaoyong and Chen, Zhiqiang and Cheng, Shi},
+year = {2025},
+month = {05},
+pages = {},
+title = {CoTHSSum: Structured long-document summarization via chain-of-thought reasoning and hierarchical segmentation},
+volume = {37},
+journal = {Journal of King Saud University Computer and Information Sciences},
+doi = {10.1007/s44443-025-00041-2}
+}
+
+@article{tuan-2026-moa,
+author = {Tuan, Cuong Vuong and Xuan, Trang Mai and Nguyen, Tien-Cuong and Ngo, Vu-Duc and Van Luong, Thien},
+title = {A training-free mixture-of-agents framework for multi-document summarization using LLMs and knowledge graphs},
+year = {2026},
+issue_date = {Jun 2026},
+publisher = {Springer-Verlag},
+address = {Berlin, Heidelberg},
+volume = {38},
+number = {13},
+issn = {0941-0643},
+url = {https://doi.org/10.1007/s00521-026-12249-y},
+doi = {10.1007/s00521-026-12249-y},
+abstract = {Multi-Document Summarization (MDS) plays a critical role in distilling essential information from collections of textual data. Existing approaches often struggle to capture complex inter-document relationships, rely heavily on large amounts of labeled data for supervised training, or exhibit limited generalization across domains and languages. To address these limitations, we present a training-free mixture-of-agents framework for MDS that leverages the complementary strengths of large language models (LLMs) and knowledge graphs. Our approach decomposes summarization into specialized agent tasks: extractive selection, knowledge-aware abstraction, and iterative refinement, each operating without task-specific fine-tuning. We unify their outputs using a multi-perspective consistency mechanism guided by LLMs. Experiments across four datasets in English and Vietnamese demonstrate state-of-the-art or competitive performance, validating the effectiveness and adaptability of our modular design.},
+journal = {Neural Comput. Appl.},
+month = jun,
+numpages = {34},
+keywords = {Multi-document summarization, Large language models, Mixture of agents, Knowledge graphs}
+}
+
+
+% rouge
+@inproceedings{lin-2004-rouge,
+    title = "{ROUGE}: A Package for Automatic Evaluation of Summaries",
+    author = "Lin, Chin-Yew",
+    booktitle = "Proceedings of the Workshop on Text Summarization Branches Out (WAS 2004)",
+    month = jul,
+    year = "2004",
+    address = "Barcelona, Spain",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/W04-1013",
+    pages = "74--81"
+}
+
+
+% datasets
+@article{tran2020vims,
+  title={{V}i{M}s: a high-quality {V}ietnamese dataset for abstractive multi-document summarization},
+  author={Tran, Nhi-Thao and Nghiem, Minh-Quoc and Nguyen, Nhung TH and Nguyen, Ngan Luu-Thuy and Chi, Nam Van and Dinh, Dien},
+  journal={Language Resources and Evaluation},
+  volume={54},
+  number={4},
+  pages={893--920},
+  year={2020},
+  publisher={Springer},
+  url={https://link.springer.com/article/10.1007/s10579-020-09495-4}
+}
+
+@inproceedings{fabbri2019multi,
+  title={Multi-News: A Large-Scale Multi-Document Summarization Dataset and Abstractive Hierarchical Model},
+  author={Fabbri, Alexander and Li, Irene and She, Tianyi and Li, Suyi and Radev, Dragomir},
+  booktitle={Proceedings of ACL 2019},
+  year={2019}
+}
+
+% VNMDS: https://github.com/lupanh/VietnameseMDS
+
+
+% models
+@misc{qwen36_35b_a3b,
+    title = {{Qwen3.6-35B-A3B}: Agentic Coding Power, Now Open to All},
+    url = {https://qwen.ai/blog?id=qwen3.6-35b-a3b},
+    author = {{Qwen Team}},
+    month = {April},
+    year = {2026}
+}
+
+@misc{gemma4_12b,
+    title = {{Gemma 4}},
+    url = {https://deepmind.google/models/gemma/gemma-4/},
+    author = {{Google DeepMind}},
+    month = {April},
+    year = {2026}
+}
+
+@misc{bge_m3,
+      title={M3-Embedding: Multi-Linguality, Multi-Functionality, Multi-Granularity Text Embeddings Through Self-Knowledge Distillation}, 
+      author={Jianlv Chen and Shitao Xiao and Peitian Zhang and Kun Luo and Defu Lian and Zheng Liu},
+      year={2025},
+      eprint={2402.03216},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2402.03216}, 
+}

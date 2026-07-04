@@ -4,9 +4,9 @@ Training-free experiment scaffold for Vietnamese and English long-/multi-documen
 
 Core variants:
 
-- `e1`: BGE-M3 chunk-centroid to tri-sentence cosine support selection.
-- `e2a`: PACSUM over all tri-sentence units.
-- `e2b`: PACSUM over stride-2 tri-sentence units.
+- `e1`: BGE-M3 chunk-centroid to segment cosine support selection.
+- `e2a`: PACSUM over all segments.
+- `e2b`: PACSUM over stride-2 segments.
 
 PACSUM defaults follow the reference CLI in `libs/PacSum/code/run.py`: `--pacsum-beta 0.0 --pacsum-lambda1 0.0 --pacsum-lambda2 1.0`. This implementation uses the original PACSUM thresholding and directional centrality rule over BGE-M3 cosine edge scores, then selects under the configured evidence token budget.
 
@@ -80,7 +80,9 @@ Aggregate one or more result files:
 python scripts/summarize_results.py runs/graphsum_results.csv --output runs/summary_results.csv
 ```
 
-Recorded metrics include ROUGE-2, ROUGE-L, ROUGE backend, input tokens, output tokens, LLM calls, runtime seconds, chunk count, and topic count. ROUGE is computed with the required `rouge-score` package.
+`scripts/run_graphsum.py` also accepts `--aggregate-output <path>` to write aggregate metrics immediately after an experiment. For `--llm openai_compatible`, the runner automatically writes `<output_stem>_summary.csv` when `--aggregate-output` is not provided.
+
+Recorded metrics include ROUGE-1, ROUGE-2, ROUGE-L, ROUGE backend, input tokens, output tokens, LLM calls, runtime seconds, chunk count, community/topic count, and the generated summary text. ROUGE is computed with the required `rouge-score` package.
 
 `dry_run` and `--dry-embed` are for pipeline debugging only and must not be reported as paper results.
 
@@ -95,3 +97,19 @@ Sequential no-graph baseline:
 ```powershell
 python scripts/run_graphsum.py --dataset vn_mds --data-root datasets --limit 5 --salience e1 --no-graph --llm openai_compatible --model <model-name> --base-url http://localhost:8000/v1
 ```
+
+Pure LLM baseline:
+
+```powershell
+python scripts/run_graphsum.py --dataset vn_mds --data-root datasets --limit 5 --pure-llm --llm openai_compatible --model <model-name> --base-url http://localhost:8000/v1 --output runs/vn_mds_pure_llm.csv
+```
+
+## Streamlit Sample Viewer
+
+Launch the single-sample visualization app:
+
+```powershell
+streamlit run scripts/streamlit_app.py
+```
+
+The viewer runs one selected sample and shows processing progress, splitter outputs, segment evidence windows, semantic chunks, chunk entities/factual phrases, selected support, Leiden chunk communities, weighted KNN graph edges, the summary graph from chunks to communities to final summary, ROUGE scores, and the generated summary.

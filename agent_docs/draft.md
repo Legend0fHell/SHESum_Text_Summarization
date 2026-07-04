@@ -4,7 +4,7 @@ Working draft v0.1. Citation metadata and real experiment results are not yet ve
 
 ## Abstract
 
-Long-document and multi-document summarization remains difficult in Vietnamese because relevant evidence is often distributed across multiple source passages, while large language model summarization over long contexts can be costly and may introduce unsupported facts. This paper proposes a training-free graph-guided Extract-Support framework for Vietnamese long-document and multi-document summarization. The framework represents source texts as overlapping tri-sentence evidence units, forms paragraph-aware semantic chunks with BGE-M3 and LangChain SemanticChunker, extracts source-only salient support evidence using embedding-based and PACSUM variants, builds a sparse weighted chunk graph, and applies Leiden community detection to form topic-level summarization groups. Each topic is summarized by an LLM using both ordered source text and selected source-derived support evidence. Higher-level merging preserves the Extract-Support constraint by reselecting support only from inherited original source units, rather than from generated summaries. The primary evaluation targets VN-MDS and ViMs, with Multi-News used for English generalization. Primary metrics are ROUGE-2 and ROUGE-L, with input tokens, output tokens, LLM calls, and runtime as efficiency submetrics. The implementation is designed to compare three extraction variants, E1 chunk-centroid cosine, E2a PACSUM over all tri-sentence units, and E2b stride-2 PACSUM, together with graph-weight ablations over positional, entity, and content similarity. Results are pending real LLM runs with Qwen3.6-35B and/or Gemma4-12B.
+Long-document and multi-document summarization remains difficult in Vietnamese because relevant evidence is often distributed across multiple source passages, while large language model summarization over long contexts can be costly and may introduce unsupported facts. This paper proposes a training-free graph-guided Extract-Support framework for Vietnamese long-document and multi-document summarization. The framework represents source texts as overlapping segment evidence units, forms paragraph-aware semantic chunks with BGE-M3 and LangChain SemanticChunker, extracts source-only salient support evidence, builds a sparse weighted chunk graph, and applies Leiden community detection to form chunk communities. Each chunk community is summarized by an LLM using both ordered source text and selected source-derived support evidence. Higher-level merging preserves the Extract-Support constraint by reselecting support only from inherited original source units, rather than from generated summaries. The primary evaluation targets VN-MDS and ViMs, with Multi-News used for English generalization. Primary metrics are ROUGE-1, ROUGE-2, and ROUGE-L, with input tokens, output tokens, LLM calls, and runtime as efficiency submetrics. The main framework setting uses E2b stride-2 PACSUM support selection. E1 chunk-centroid cosine, E2a PACSUM over all segments, and E2b are treated as salience ablations. Results are pending real LLM runs with Qwen3.6-35B and/or Gemma4-12B.
 
 Keywords: Vietnamese summarization; long-document summarization; multi-document summarization; graph clustering; Leiden algorithm; Extract-Support; training-free NLP
 
@@ -33,7 +33,7 @@ The intended contributions are:
 1. A training-free graph-guided Extract-Support architecture for Vietnamese long-document and multi-document summarization.
 2. A source-only evidence propagation rule for hierarchical summarization, where support evidence at every level remains traceable to original tri-sentence units.
 3. A sparse weighted chunk graph using positional, entity/factual phrase, and content similarity, clustered with Leiden.
-4. A focused ablation design over E1, E2a, E2b salience extraction and graph edge weights.
+4. A focused main evaluation using E2b, with E1/E2a/E2b salience ablations and graph edge-weight ablations.
 5. An open implementation scaffold for reproducible experiments on VN-MDS, ViMs, and Multi-News.
 
 ## 2. Related Work
@@ -193,13 +193,14 @@ The planned systems are:
 
 | System | Graph | Salience | Notes |
 | --- | --- | --- | --- |
-| No-Graph E1 | No | E1 | Sequential chunk/topic baseline |
-| Graph E1 | Yes | E1 | Centroid support with Leiden topic groups |
-| Graph E2a | Yes | E2a | PACSUM over all tri-sentence units |
-| Graph E2b | Yes | E2b | PACSUM over stride-2 tri-sentence units |
+| Pure LLM | No | None | Direct full-text prompt baseline |
+| No-Graph E2b | No | E2b | Sequential chunk-community baseline without graph clustering |
+| Graph E2b | Yes | E2b | Main proposed setting |
+| Graph E1 | Yes | E1 | Salience ablation |
+| Graph E2a | Yes | E2a | Salience ablation |
 | Optional MoA baseline | External | External | Inspiration/baseline only if reproduced or fairly run |
 
-The graph-weight grid is evaluated for each salience variant when compute budget permits.
+The graph-weight grid is evaluated on E2b first. E1 and E2a are run as salience ablations when compute budget permits.
 
 ### 4.4 Metrics
 
@@ -231,13 +232,11 @@ Real LLM results are pending. This section must not use dry-run or hash-embeddin
 
 | Dataset | System | ROUGE-2 | ROUGE-L | Input tokens | Output tokens | LLM calls | Runtime seconds |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| VN-MDS | No-Graph E1 | TODO | TODO | TODO | TODO | TODO | TODO |
-| VN-MDS | Graph E1 | TODO | TODO | TODO | TODO | TODO | TODO |
-| VN-MDS | Graph E2a | TODO | TODO | TODO | TODO | TODO | TODO |
+| VN-MDS | Pure LLM | TODO | TODO | TODO | TODO | TODO | TODO |
+| VN-MDS | No-Graph E2b | TODO | TODO | TODO | TODO | TODO | TODO |
 | VN-MDS | Graph E2b | TODO | TODO | TODO | TODO | TODO | TODO |
-| ViMs | No-Graph E1 | TODO | TODO | TODO | TODO | TODO | TODO |
-| ViMs | Graph E1 | TODO | TODO | TODO | TODO | TODO | TODO |
-| ViMs | Graph E2a | TODO | TODO | TODO | TODO | TODO | TODO |
+| ViMs | Pure LLM | TODO | TODO | TODO | TODO | TODO | TODO |
+| ViMs | No-Graph E2b | TODO | TODO | TODO | TODO | TODO | TODO |
 | ViMs | Graph E2b | TODO | TODO | TODO | TODO | TODO | TODO |
 
 ### 5.2 Graph Weight Ablation
@@ -250,15 +249,15 @@ Real LLM results are pending. This section must not use dry-run or hash-embeddin
 
 | Dataset | System | ROUGE-2 | ROUGE-L | Input tokens | Output tokens | LLM calls | Runtime seconds |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Multi-News | Graph E1 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Multi-News | Graph E2a | TODO | TODO | TODO | TODO | TODO | TODO |
+| Multi-News | Pure LLM | TODO | TODO | TODO | TODO | TODO | TODO |
+| Multi-News | No-Graph E2b | TODO | TODO | TODO | TODO | TODO | TODO |
 | Multi-News | Graph E2b | TODO | TODO | TODO | TODO | TODO | TODO |
 
 ## 6. Discussion
 
 The framework is designed around a simple premise: the expensive generative model should not be responsible for every operation in a long-document summarization system. Embedding, graph clustering, entity extraction, salience selection, and evidence compaction can be performed before generation. This shifts the LLM role toward topic-level abstraction while preserving a source evidence path for factual grounding.
 
-If Graph E1 outperforms No-Graph E1, the result would support the usefulness of Leiden topic formation. If Graph E2a or E2b outperforms E1, the result would suggest that graph-central source evidence is more effective than centroid-only evidence. If E2b achieves similar ROUGE with fewer input tokens or faster runtime than E2a, stride-2 PACSUM would be a useful efficiency variant for overlapping tri-sentence units.
+If Graph E2b outperforms No-Graph E2b, the result would support the usefulness of Leiden chunk-community formation. If Graph E2b outperforms E1 and E2a ablations under matched settings, the result would suggest that stride-2 PACSUM is a useful default support selector. If E2b achieves similar ROUGE with fewer input tokens or faster runtime than E2a, stride-2 PACSUM would be a useful efficiency variant for overlapping segment evidence units.
 
 The entity edge weight ablation is especially important. A high beta may over-connect chunks that share common entities, while beta = 0 removes factual phrase information from clustering. The expected useful range is likely moderate, with content similarity remaining the dominant signal and positional similarity acting as a weak regularizer.
 

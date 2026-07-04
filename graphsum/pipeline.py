@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 
 import numpy as np
 
 from .config import embedding_settings
-from .data import Sample
+from .data import Document, Sample
 from .entities import canonicalize_phrase_maps, extract_phrase_map
 from .graph import GraphWeights, build_weighted_edges, cluster_chunks
 from .llm import BaseLLM, LLMResult, count_tokens
@@ -40,6 +41,26 @@ class PipelineOutput:
     llm_calls: int
     chunk_count: int
     topic_count: int
+    trace: "PipelineTrace | None" = None
+
+
+@dataclass
+class PipelineTrace:
+    progress: list[dict[str, str]] = field(default_factory=list)
+    splitter_outputs: list[dict[str, object]] = field(default_factory=list)
+    segments: list[dict[str, object]] = field(default_factory=list)
+    chunks: list[dict[str, object]] = field(default_factory=list)
+    chunk_entities: list[dict[str, object]] = field(default_factory=list)
+    support: list[dict[str, object]] = field(default_factory=list)
+    graph_edges: list[dict[str, object]] = field(default_factory=list)
+    communities: list[dict[str, object]] = field(default_factory=list)
+    community_summaries: list[dict[str, object]] = field(default_factory=list)
+    summary_graph_nodes: list[dict[str, object]] = field(default_factory=list)
+    summary_graph_edges: list[dict[str, object]] = field(default_factory=list)
+    final_summary: str = ""
+
+
+ProgressCallback = Callable[[str, str], None]
 
 
 class Embedder:
@@ -87,13 +108,23 @@ class Embedder:
         return [_hash_embedding(text) for text in texts]
 
 
-def run_sample(sample: Sample, config: PipelineConfig, embedder: Embedder, llm: BaseLLM) -> PipelineOutput:
+def run_sample(
+    sample: Sample,
+    config: PipelineConfig,
+    embedder: Embedder,
+    llm: BaseLLM,
+    trace: PipelineTrace | None = None,
+    progress_callback: ProgressCallback | None = None,
+) -> PipelineOutput:
+    _record_progress(trace, progress_callback, "preprocess", "Splitting documents and building segment windows")
     units: list[TriSentenceUnit] = []
     chunks: list[Chunk] = []
     for document in sample.documents:
         sentences = make_sentences(document)
         doc_units = make_tri_units(sentences)
         units.extend(doc_units)
+        _trace_splitter_outputs(trace, sentences)
+        _trace_segments(trace, doc_units)
         chunks.extend(
             make_chunks(
                 document,
@@ -106,10 +137,24 @@ def run_sample(sample: Sample, config: PipelineConfig, embedder: Embedder, llm: 
             )
         )
     unit_lookup = {unit.unit_id: unit for unit in units}
+
+    _record_progress(trace, progress_callback, "embed", "Embedding segments and semantic chunks")
     _attach_embeddings(units, chunks, embedder)
+
+    _record_progress(trace, progress_callback, "entities", "Extracting and consolidating chunk entities and factual phrases")
     _attach_phrases(chunks, sample.language, embedder, config.entity_merge_threshold)
+
+    _record_progress(trace, progress_callback, "support", "Selecting source support segments")
     support_by_chunk = _select_support(units, chunks, unit_lookup, config)
-    topics = _make_topics(chunks, config)
+    _trace_chunks(trace, chunks)
+    _trace_support(trace, support_by_chunk, unit_lookup)
+
+    _record_progress(trace, progress_callback, "graph", "Building chunk graph and Leiden chunk communities")
+    topics, graph_edges = _build_communities(chunks, config)
+    _trace_graph(trace, chunks, graph_edges)
+    _trace_communities(trace, chunks, topics)
+
+    _record_progress(trace, progress_callback, "summarize", "Generating community-level summaries")
     topic_results: list[LLMResult] = []
     topic_support_ids: list[list[str]] = []
     for topic in topics:
@@ -120,9 +165,11 @@ def run_sample(sample: Sample, config: PipelineConfig, embedder: Embedder, llm: 
         topic_support_ids.append(support_ids)
         prompt = _topic_prompt(topic_chunks, compact_unit_texts(support_ids, unit_lookup), sample.language)
         topic_results.append(llm.summarize(prompt))
+        _trace_community_summary(trace, len(topic_results) - 1, topic_chunks, topic_results[-1])
     if len(topic_results) == 1:
         final = topic_results[0]
     else:
+        _record_progress(trace, progress_callback, "merge", "Merging community summaries with source-only support")
         merged = "\n".join(result.text for result in topic_results)
         support_pool_ids = _select_higher_level_support(topic_support_ids, unit_lookup, merged, embedder, config)
         support_pool = compact_unit_texts(support_pool_ids, unit_lookup, max_tokens=config.evidence_max_tokens)
@@ -130,13 +177,25 @@ def run_sample(sample: Sample, config: PipelineConfig, embedder: Embedder, llm: 
         final.input_tokens += sum(result.input_tokens for result in topic_results)
         final.output_tokens += sum(result.output_tokens for result in topic_results)
         final.calls += sum(result.calls for result in topic_results)
-    return PipelineOutput(final.text, final.input_tokens, final.output_tokens, final.calls, len(chunks), len(topics))
+    _trace_summary_graph(trace, chunks, topics, final.text)
+    _record_progress(trace, progress_callback, "done", "Finished summarization")
+    return PipelineOutput(final.text, final.input_tokens, final.output_tokens, final.calls, len(chunks), len(topics), trace)
 
 
-def run_direct_sample(sample: Sample, llm: BaseLLM) -> PipelineOutput:
+def run_direct_sample(
+    sample: Sample,
+    llm: BaseLLM,
+    trace: PipelineTrace | None = None,
+    progress_callback: ProgressCallback | None = None,
+) -> PipelineOutput:
+    _record_progress(trace, progress_callback, "direct", "Sending all source documents directly to the LLM")
     source_text = "\n\n".join(_document_block(index, document) for index, document in enumerate(sample.documents, start=1))
     result = llm.summarize(render_direct_prompt(source_text, sample.language))
-    return PipelineOutput(result.text, result.input_tokens, result.output_tokens, result.calls, len(sample.documents), 1)
+    if trace is not None:
+        trace.final_summary = result.text
+        trace.summary_graph_nodes.append({"node_id": "direct_llm", "kind": "direct_llm", "label": "Direct LLM"})
+    _record_progress(trace, progress_callback, "done", "Finished direct summarization")
+    return PipelineOutput(result.text, result.input_tokens, result.output_tokens, result.calls, len(sample.documents), 1, trace)
 
 
 def _attach_embeddings(units: list[TriSentenceUnit], chunks: list[Chunk], embedder: Embedder) -> None:
@@ -192,10 +251,14 @@ def _select_support(
 
 
 def _make_topics(chunks: list[Chunk], config: PipelineConfig) -> list[list[int]]:
+    return _build_communities(chunks, config)[0]
+
+
+def _build_communities(chunks: list[Chunk], config: PipelineConfig) -> tuple[list[list[int]], list[tuple[int, int, float]]]:
     if not config.use_graph:
-        return [[idx] for idx in range(len(chunks))]
+        return [[idx] for idx in range(len(chunks))], []
     edges = build_weighted_edges(chunks, config.graph_weights, k=config.k_neighbors)
-    return cluster_chunks(chunks, edges)
+    return cluster_chunks(chunks, edges), edges
 
 
 def _select_higher_level_support(
@@ -250,6 +313,146 @@ def _document_block(index: int, document) -> str:
         lines.append(f"Source: {document.source}")
     lines.append(document.text)
     return "\n".join(lines)
+
+
+def _record_progress(trace: PipelineTrace | None, callback: ProgressCallback | None, stage: str, message: str) -> None:
+    if trace is not None:
+        trace.progress.append({"stage": stage, "message": message})
+    if callback is not None:
+        callback(stage, message)
+
+
+def _trace_splitter_outputs(trace: PipelineTrace | None, sentences) -> None:
+    if trace is None:
+        return
+    for sentence in sentences:
+        trace.splitter_outputs.append(
+            {
+                "splitter_output_id": sentence.sentence_id,
+                "document_id": sentence.document_id,
+                "paragraph_id": sentence.paragraph_id,
+                "index": sentence.index,
+                "text": sentence.text,
+            }
+        )
+
+
+def _trace_segments(trace: PipelineTrace | None, units: list[TriSentenceUnit]) -> None:
+    if trace is None:
+        return
+    for unit in units:
+        trace.segments.append(
+            {
+                "segment_id": unit.unit_id,
+                "document_id": unit.document_id,
+                "center_index": unit.center_index,
+                "splitter_output_ids": ", ".join(unit.sentence_ids),
+                "text": unit.text,
+            }
+        )
+
+
+def _trace_chunks(trace: PipelineTrace | None, chunks: list[Chunk]) -> None:
+    if trace is None:
+        return
+    for chunk in chunks:
+        trace.chunks.append(
+            {
+                "chunk_id": chunk.chunk_id,
+                "document_id": chunk.document_id,
+                "position": chunk.position,
+                "segment_count": len(chunk.unit_ids),
+                "text": chunk.text,
+            }
+        )
+        for phrase, types in sorted(chunk.phrase_types.items()):
+            trace.chunk_entities.append(
+                {
+                    "chunk_id": chunk.chunk_id,
+                    "phrase": phrase,
+                    "types": ", ".join(sorted(types)),
+                    "aliases": ", ".join(sorted(chunk.phrase_aliases.get(phrase, {phrase}))),
+                }
+            )
+
+
+def _trace_support(trace: PipelineTrace | None, support_by_chunk: dict[str, list[str]], unit_lookup: dict[str, TriSentenceUnit]) -> None:
+    if trace is None:
+        return
+    for chunk_id, unit_ids in sorted(support_by_chunk.items()):
+        for rank, unit_id in enumerate(unit_ids, start=1):
+            unit = unit_lookup.get(unit_id)
+            trace.support.append(
+                {
+                    "chunk_id": chunk_id,
+                    "rank": rank,
+                    "segment_id": unit_id,
+                    "text": unit.text if unit is not None else "",
+                }
+            )
+
+
+def _trace_graph(trace: PipelineTrace | None, chunks: list[Chunk], edges: list[tuple[int, int, float]]) -> None:
+    if trace is None:
+        return
+    for left, right, weight in edges:
+        trace.graph_edges.append(
+            {
+                "source": chunks[left].chunk_id,
+                "target": chunks[right].chunk_id,
+                "source_index": left,
+                "target_index": right,
+                "weight": weight,
+            }
+        )
+
+
+def _trace_communities(trace: PipelineTrace | None, chunks: list[Chunk], communities: list[list[int]]) -> None:
+    if trace is None:
+        return
+    for community_index, community in enumerate(communities):
+        for chunk_index in community:
+            chunk = chunks[chunk_index]
+            trace.communities.append(
+                {
+                    "community_id": f"community_{community_index}",
+                    "community_index": community_index,
+                    "chunk_id": chunk.chunk_id,
+                    "document_id": chunk.document_id,
+                    "chunk_position": chunk.position,
+                    "chunk_index": chunk_index,
+                }
+            )
+
+
+def _trace_community_summary(trace: PipelineTrace | None, community_index: int, chunks: list[Chunk], result: LLMResult) -> None:
+    if trace is None:
+        return
+    trace.community_summaries.append(
+        {
+            "community_id": f"community_{community_index}",
+            "chunk_ids": ", ".join(chunk.chunk_id for chunk in chunks),
+            "input_tokens": result.input_tokens,
+            "output_tokens": result.output_tokens,
+            "summary": result.text,
+        }
+    )
+
+
+def _trace_summary_graph(trace: PipelineTrace | None, chunks: list[Chunk], communities: list[list[int]], final_summary: str) -> None:
+    if trace is None:
+        return
+    trace.final_summary = final_summary
+    for chunk in chunks:
+        trace.summary_graph_nodes.append({"node_id": chunk.chunk_id, "kind": "chunk", "label": chunk.chunk_id})
+    for community_index, community in enumerate(communities):
+        community_id = f"community_{community_index}"
+        trace.summary_graph_nodes.append({"node_id": community_id, "kind": "community", "label": community_id})
+        for chunk_index in community:
+            trace.summary_graph_edges.append({"source": chunks[chunk_index].chunk_id, "target": community_id, "kind": "chunk_to_community"})
+    trace.summary_graph_nodes.append({"node_id": "final_summary", "kind": "final", "label": "final_summary"})
+    for community_index in range(len(communities)):
+        trace.summary_graph_edges.append({"source": f"community_{community_index}", "target": "final_summary", "kind": "community_to_final"})
 
 
 def _hash_embedding(text: str, dims: int = 384) -> list[float]:

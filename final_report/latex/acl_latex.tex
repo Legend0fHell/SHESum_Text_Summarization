@@ -1,0 +1,336 @@
+% This must be in the first 5 lines to tell arXiv to use pdfLaTeX.
+\pdfoutput=1
+
+\documentclass[11pt]{article}
+
+\usepackage[preprint]{acl}
+
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage[T1]{fontenc}
+\usepackage[T5]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{inconsolata}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\title{Graph-Guided Extract-Support Summarization for Vietnamese Long and Multi-Document Texts}
+
+\author{ABC \\
+  University of Information Technology, VNUHCM, Vietnam \\
+  \texttt{abc@gmail.com}
+  \And
+  Xuan-Dung Doan \\
+  Viettel Artificial Intelligence Center, Viettel Group, Vietnam \\
+  \texttt{dungdx4@viettel.com.vn}}
+
+\newcommand{\methodname}{Graph-Guided Extract-Support}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Long-document and multi-document summarization remains challenging when relevant evidence is distributed across multiple passages and direct long-context prompting is expensive or unreliable. This paper presents a training-free graph-guided Extract-Support framework for Vietnamese long-document and multi-document summarization. The method uses a rule-based boundary splitter to construct overlapping segment evidence units, forms larger semantic chunks with BGE-M3 embeddings, builds a sparse weighted chunk graph from positional, entity/factual phrase, and content-similarity signals, and applies Leiden community detection to form chunk communities. Each community is summarized by a large language model using both ordered source text and compact source-derived support. Higher-level merging preserves source grounding by reselecting support only from inherited original source segments, rather than from generated summaries. The main configuration uses stride-2 PACSUM support selection (E2b). We plan experiments on 100 samples each from VN-MDS, ViMs, and Multi-News, comparing the main graph setting with a no-graph Extract-Support baseline and a pure LLM baseline, while treating E1/E2a/E2b as support-selection ablations. Evaluation reports ROUGE-1, ROUGE-2, ROUGE-L, input tokens, output tokens, LLM calls, and runtime. Real model results are pending and will be added after running the planned experiments.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:introduction}
+
+Long-document and multi-document summarization requires systems to identify, preserve, and synthesize information that may be distributed across many passages. Large language models (LLMs) can produce fluent summaries, but using them directly over long inputs can be costly, and recursive summarization can lose source details when later stages condition mainly on earlier generated summaries. This issue is especially relevant for Vietnamese summarization, where task-specific training resources are more limited than in English, while practical applications such as news monitoring, report summarization, and public-communication analysis still require scalable and factual summaries.
+
+This paper studies a training-free framework for Vietnamese long-document and multi-document summarization. Training-free does not mean model-free: the framework uses pretrained multilingual embeddings, lightweight NLP tools, graph clustering, and LLM prompting, but it does not train a task-specific summarization model. The central design principle is to separate low-cost source processing from expensive abstractive generation. Boundary splitting, segment construction, semantic chunking, entity and factual phrase extraction, salience ranking, graph construction, and community detection are performed before LLM summarization. LLM calls are reserved for community-level abstraction and final merging.
+
+The framework builds on Context-Aware Hierarchical Merging, particularly the Extract-Support setting in which source-derived support is provided to later summarization stages \citep{ou-lapata-2025-hierarchical}. We adopt the factuality-oriented idea that generated summaries should not become the only information path upward through the hierarchy. Instead, every community-level summary keeps a separate set of source support identifiers. At later stages, support is reselected only from inherited source-derived support, preserving an explicit provenance path back to the original documents.
+
+The second design choice is to replace fixed sequential grouping with graph-guided grouping. Semantic chunks are nodes in a sparse graph. Candidate edges are weighted by document-relative position, entity/factual phrase overlap, and embedding-based content similarity. Leiden community detection then groups chunks into chunk communities \citep{traag-2019-leiden}. We use the term \textit{chunk community} deliberately: it denotes a graph-theoretic grouping induced by the weighted chunk graph, not necessarily a human-interpretable linguistic topic.
+
+The paper asks four research questions:
+
+\begin{description}
+    \item[RQ1] Does graph-guided chunk-community formation improve summarization quality or efficiency compared with sequential no-graph Extract-Support summarization?
+    \item[RQ2] How does the main E2b support selector compare with E1 and E2a under matched settings?
+    \item[RQ3] How do positional, entity/factual phrase, and content edge weights affect ROUGE and efficiency metrics?
+    \item[RQ4] Does the Vietnamese-focused framework transfer to English Multi-News when the entity extractor is switched to an English pipeline?
+\end{description}
+
+The intended contributions are:
+
+\begin{enumerate}
+    \item A training-free graph-guided Extract-Support framework for Vietnamese long-document and multi-document summarization.
+    \item A segment-based source evidence representation designed for rule-based boundary splitters that may produce sentence-like spans, clauses, headlines, or fragments.
+    \item A sparse weighted chunk graph combining positional, entity/factual phrase, and content similarity, clustered with Leiden community detection.
+    \item A source-only support propagation rule for community-level and final merge stages.
+    \item A controlled evaluation design over VN-MDS, ViMs, and Multi-News, including no-graph and pure LLM baselines.
+\end{enumerate}
+
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Hierarchical and Context-Aware Summarization}
+
+Hierarchical summarization decomposes long inputs into smaller units, summarizes them, and recursively merges intermediate summaries. This strategy addresses context-window limits, but it can also amplify omissions or unsupported details when later stages depend only on generated summaries. Context-Aware Hierarchical Merging directly studies this problem and shows that adding source-derived context to later merging stages can improve long-document summarization, with Extract-Support variants being particularly relevant to our design \citep{ou-lapata-2025-hierarchical}. Our framework follows the same source-grounding principle but changes the grouping mechanism: instead of fixed merge groups, it creates graph-based chunk communities and carries source support identifiers upward through the hierarchy.
+
+\subsection{Structure-Aware Segmentation}
+
+Long inputs often contain paragraph boundaries, headings, lists, and local shifts in subject matter. Structured long-document summarization work argues that segmentation should preserve such organization rather than relying only on arbitrary fixed-length chunks \citep{chen-2025-cothssum}. Our method uses paragraph structure when available and then applies semantic chunking over splitter outputs. Because a rule-based splitter can return clauses, headlines, fragments, or other sentence-like spans, we avoid treating its outputs as guaranteed grammatical sentences.
+
+We define a \textit{segment} as a sentence-like evidence unit produced from the rule-based boundary splitter. Each segment is constructed from up to three consecutive splitter outputs using an overlapping window. The three-output window is a best-effort mechanism for preserving local context, especially when short spans depend on neighboring text.
+
+\subsection{Graph Clustering for Text Organization}
+
+Graph clustering provides a way to organize text units by similarity and structural relations. D2CS is a close precedent for constructing a graph over text representations and applying clustering, although it operates primarily at the document level and includes LLM-guided refinement \citep{ashkenazi-2025-d2cs}. Our framework instead constructs a graph over semantic chunks inside a summarization pipeline and avoids LLM-based graph refinement. Leiden community detection is used because it is designed to produce well-connected communities and improve on Louvain-style community detection \citep{traag-2019-leiden}.
+
+\subsection{Extractive Support Selection}
+
+The Extract-Support component depends on selecting source evidence that is informative enough to ground generation while compact enough to control prompt length. A simple baseline ranks candidate segments by cosine similarity to the parent chunk embedding. PACSUM provides a stronger unsupervised centrality-based extractor by ranking sentences with directed graph structure and relative-position effects \citep{zheng-lapata-2019-pacsum}. We evaluate PACSUM with BGE-M3 cosine similarities in two variants: one over all segment candidates and one over stride-2 candidates to reduce overlap among adjacent segment windows.
+
+\subsection{Lightweight Entity and Factual Phrase Processing}
+
+Entity and factual phrase information can help connect semantically related chunks and preserve factual anchors such as dates, amounts, and percentages. E$^2$GraphRAG motivates the use of efficient entity-centric structures without requiring a full relation-heavy knowledge graph \citep{zhao-2025-e2graphrag}. We follow this lightweight direction by extracting chunk-level named entities and rule-based factual phrases, then using canonicalized phrase sets as one edge signal in the chunk graph.
+
+MoA is relevant as a training-free multi-document summarization framework that uses LLMs and knowledge graphs \citep{tuan-2026-moa}. We treat it as inspiration and a possible external baseline, not as the main framing of the paper. Our emphasis is lower LLM-call usage, source-only support propagation, and graph-guided chunk-community formation.
+
+\section{Method}
+\label{sec:method}
+
+\subsection{Overview}
+
+Given a document collection, \methodname{} constructs evidence-bearing representations before invoking the LLM:
+
+\begin{center}
+\begin{tabular}{c}
+documents \\
+$\rightarrow$ splitter outputs \\
+$\rightarrow$ overlapping segments \\
+$\rightarrow$ semantic chunks \\
+$\rightarrow$ sparse weighted chunk graph \\
+$\rightarrow$ Leiden chunk communities \\
+$\rightarrow$ community-level Extract-Support summaries \\
+$\rightarrow$ final source-supported summary
+\end{tabular}
+\end{center}
+
+Generated summaries are used for abstraction, while source support remains separately stored and traceable. This separation is the main factuality-oriented constraint of the framework.
+
+\subsection{Segment Construction}
+
+Let $x_i$ denote the $i$-th output of the rule-based boundary splitter. The splitter output may be a sentence, headline, clause, fragment, or other sentence-like span. For each index $i$, we construct an overlapping segment $g_i$ from up to three consecutive splitter outputs:
+
+\begin{equation}
+g_i = \mathrm{concat}(x_{i-1}, x_i, x_{i+1}).
+\end{equation}
+
+Boundary cases use the available neighboring outputs. Each segment stores its document identifier, source span identifiers, center index, raw text, and embedding. These segments are the atomic support candidates for extraction. Selected overlapping segments are compacted before prompting by merging shared source spans into a source-ordered evidence passage.
+
+\subsection{Semantic Chunking}
+
+Semantic chunks are larger text units used as graph nodes. We use BGE-M3 embeddings \citep{bge_m3} with a semantic chunking procedure and preserve paragraph boundaries as structural hints when available. The target chunk size is approximately 1,000 to 1,500 whitespace tokens. Each chunk stores its text, source segment identifiers, document-relative position, embedding, and canonical phrase set.
+
+% TODO: Add verified citation metadata for LangChain SemanticChunker if cited as a method rather than implementation detail.
+
+\subsection{Entity and Factual Phrase Extraction}
+
+For Vietnamese inputs, chunk-level named entities are extracted with Underthesea and augmented with rule-based factual phrase extraction. For English inputs, the system switches to spaCy English NER with the same regex factual phrase layer. The rule layer detects dates, percentages, money expressions, and related factual anchors. Raw phrases are normalized and mapped to chunks.
+
+Named-entity aliases are consolidated with embedding cosine similarity using a default merge threshold of 0.85. Numeric, date, and money phrases are not merged by embedding similarity, since doing so could collapse distinct factual values. The resulting typed phrase sets are used for graph edge weighting.
+
+% TODO: Add verified citation metadata for Underthesea and spaCy if software citations are required.
+
+\subsection{Source Support Selection}
+
+The main framework configuration uses E2b, a stride-2 PACSUM support selector. E1 and E2a are retained as salience ablations to isolate the effect of the support-selection strategy.
+
+\paragraph{E1: centroid similarity ablation.}
+E1 ranks all segments associated with a chunk by cosine similarity to the chunk embedding:
+
+\begin{equation}
+\mathrm{score}(g_i, c) = \cos(e_{g_i}, e_c),
+\end{equation}
+
+where $e_{g_i}$ is the segment embedding and $e_c$ is the chunk embedding. Segments are selected in descending order until the evidence token budget is reached.
+
+\paragraph{E2a: PACSUM over all segments ablation.}
+E2a applies PACSUM \citep{zheng-lapata-2019-pacsum} to all segment candidates within a chunk. The implementation uses BGE-M3 cosine similarities as edge scores and selects segments under the same token budget.
+
+\paragraph{E2b: main stride-2 PACSUM selector.}
+E2b applies the same PACSUM scoring but only to stride-2 segment candidates. This is the main support-selection setting because it reduces overlap between adjacent evidence windows and lowers pairwise scoring cost.
+
+\subsection{Sparse Weighted Chunk Graph}
+
+Each semantic chunk is a graph node. Candidate edges are constructed from semantic nearest neighbors and adjacent chunks from the same source document. For candidate chunks $i$ and $j$, the final edge weight is:
+
+\begin{equation}
+w_{ij} = \alpha P_{ij} + \beta E_{ij} + \gamma C_{ij},
+\end{equation}
+
+where $P_{ij}$ is document-relative positional similarity, $E_{ij}$ is typed TF-IDF cosine similarity over canonical entity and factual phrase sets, and $C_{ij}$ is embedding cosine similarity. The weights satisfy:
+
+\begin{equation}
+\alpha + \beta + \gamma = 1.
+\end{equation}
+
+Positional similarity is only defined within the same document:
+
+\begin{equation}
+P_{ij} =
+\begin{cases}
+\exp(-|p_i - p_j| / \tau), & d_i = d_j, \\
+0, & d_i \ne d_j,
+\end{cases}
+\end{equation}
+
+where $p_i$ is the document-relative chunk position and $d_i$ is the document identifier. The default graph weights are $\alpha=0.10$, $\beta=0.20$, and $\gamma=0.70$.
+
+\subsection{Leiden Chunk Communities}
+
+Leiden community detection is applied to the sparse weighted graph \citep{traag-2019-leiden}. The output communities are chunk communities, not assumed linguistic topics. Chunks inside a community are sorted back into source order before prompting. If graph clustering is disabled, each chunk is treated as its own community, yielding the no-graph Extract-Support baseline.
+
+\subsection{Community-Level Extract-Support Generation}
+
+For each chunk community, the LLM receives two text fields: the ordered source text from community chunks and compact source-derived support selected from segments. The prompt instructs the model to preserve entities, factual phrases, numbers, dates, and contrastive claims while avoiding unsupported facts. The prompt returns only the summary.
+
+If multiple community-level summaries are produced, the system performs a final merge. The merge stage receives generated community summaries plus source-derived support. Crucially, merge support is not generated text. It is reselected from the union of child support segments:
+
+\begin{equation}
+E_{\mathrm{parent}} \subseteq \bigcup_{k \in \mathrm{children}} E_k.
+\end{equation}
+
+This source-only propagation rule preserves the Extract-Support constraint across hierarchy levels.
+
+\section{Experimental Setup}
+\label{sec:experiments}
+
+\subsection{Datasets}
+
+Experiments are planned on 100 samples from each dataset.
+
+\paragraph{VN-MDS.}
+VN-MDS is used as a Vietnamese multi-document summarization dataset. The current loader reads source documents from local cluster folders using raw article body files and uses the two raw human reference summaries per cluster. Tokenized reference files are excluded from evaluation.
+
+% TODO: Add verified BibTeX metadata for VN-MDS / VietnameseMDS. Current custom.bib contains only a repository comment.
+
+\paragraph{ViMs.}
+ViMs is a Vietnamese abstractive multi-document summarization dataset \citep{tran2020vims}. The current loader reads source documents from the `original' folders and uses the two `.gold.txt' summaries as annotator references.
+
+\paragraph{Multi-News.}
+Multi-News is an English multi-document summarization dataset \citep{fabbri2019multi}. It is used to test whether the framework transfers when the Vietnamese entity extractor is replaced by an English NER pipeline.
+
+\subsection{Compared Systems}
+
+We compare the following systems:
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{llll}
+\toprule
+System & Graph & Support & Notes \\
+\midrule
+Pure LLM & No & No & Full source text prompt \\
+Pure LLM & No & None & Direct full-text prompt \\
+No-Graph E2b & No & E2b & Sequential chunk baseline \\
+Graph E2b & Yes & E2b & Main proposed setting \\
+Graph E1 & Yes & E1 & Salience ablation \\
+Graph E2a & Yes & E2a & Salience ablation \\
+\bottomrule
+\end{tabular}
+\caption{Planned systems. Graph E2b is the main proposed setting. E1 and E2a are salience ablations. The pure LLM baseline bypasses embeddings, chunking, graph construction, entity extraction, support selection, and hierarchical merging.}
+\label{tab:systems}
+\end{table}
+
+The graph-weight ablation uses $\alpha \in \{0.00, 0.05, 0.10, 0.15, 0.20\}$. For each $\alpha$, $\beta$ ranges from 0 to $1-\alpha$ in steps of 0.10, including the endpoint. $\gamma$ is set to $1-\alpha-\beta$.
+
+\subsection{Models and Runtime Configuration}
+
+BGE-M3 is used as the embedding model \citep{bge_m3}. Qwen3.6-35B and Gemma4-12B are treated as replaceable LLM choices in the experiment configuration rather than as part of the proposed method \citep{qwen36_35b_a3b,gemma4_12b}. LLMs are accessed through an OpenAI-compatible endpoint. Dry-run LLM outputs and hash embeddings are used only for debugging and are not reportable results.
+
+\subsection{Evaluation Metrics}
+
+Summaries are evaluated with ROUGE \citep{lin-2004-rouge}. We report ROUGE-1, ROUGE-2, and ROUGE-L. For datasets with two human references, each generated summary is scored against both references. A single reference is selected by the highest mean of ROUGE-2 and ROUGE-L, and ROUGE-1, ROUGE-2, and ROUGE-L are all reported from that same selected reference.
+
+Efficiency metrics include input tokens, output tokens, LLM calls, and runtime seconds. Diagnostic fields include chunk count, community count, generated summary text, selected reference index, and reference count.
+
+\section{Results}
+\label{sec:results}
+
+Real LLM results are pending. This section will be filled only after running the planned 100-sample experiments on VN-MDS, ViMs, and Multi-News. Dry-run outputs and hash-embedding smoke tests must not be reported as paper results.
+
+\begin{table*}[t]
+\centering
+\small
+\begin{tabular}{llrrrrrrr}
+\toprule
+Dataset & System & R-1 & R-2 & R-L & Input tok. & Output tok. & Calls & Runtime \\
+\midrule
+VN-MDS & Pure LLM & TODO & TODO & TODO & TODO & TODO & TODO & TODO \\
+VN-MDS & No-Graph E2b & TODO & TODO & TODO & TODO & TODO & TODO & TODO \\
+VN-MDS & Graph E2b & TODO & TODO & TODO & TODO & TODO & TODO & TODO \\
+ViMs & Pure LLM & TODO & TODO & TODO & TODO & TODO & TODO & TODO \\
+ViMs & No-Graph E2b & TODO & TODO & TODO & TODO & TODO & TODO & TODO \\
+ViMs & Graph E2b & TODO & TODO & TODO & TODO & TODO & TODO & TODO \\
+Multi-News & Pure LLM & TODO & TODO & TODO & TODO & TODO & TODO & TODO \\
+Multi-News & No-Graph E2b & TODO & TODO & TODO & TODO & TODO & TODO & TODO \\
+Multi-News & Graph E2b & TODO & TODO & TODO & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Main planned results. R-1, R-2, and R-L denote ROUGE-1, ROUGE-2, and ROUGE-L.}
+\label{tab:main-results}
+\end{table*}
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{llrrr}
+\toprule
+Dataset & Salience & R-1 & R-2 & R-L \\
+\midrule
+VN-MDS & E1 & TODO & TODO & TODO \\
+VN-MDS & E2a & TODO & TODO & TODO \\
+VN-MDS & E2b & TODO & TODO & TODO \\
+ViMs & E1 & TODO & TODO & TODO \\
+ViMs & E2a & TODO & TODO & TODO \\
+ViMs & E2b & TODO & TODO & TODO \\
+Multi-News & E1 & TODO & TODO & TODO \\
+Multi-News & E2a & TODO & TODO & TODO \\
+Multi-News & E2b & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\caption{Planned salience ablation. E2b is the main setting; E1 and E2a isolate the effect of support selection.}
+\label{tab:salience-ablation}
+\end{table}
+
+\section{Discussion}
+\label{sec:discussion}
+
+The discussion will interpret results after experiments are complete. The planned analysis will compare graph-guided chunk communities with sequential no-graph processing, compare support selectors, assess graph-weight sensitivity, and examine whether Vietnamese conclusions transfer to Multi-News.
+
+\section{Limitations}
+\label{sec:limitations}
+
+The current draft has several limitations. First, real LLM experiments have not yet been run. Second, the pure LLM baseline may exceed the context window for some samples, depending on the served model configuration. Third, token-bounded splitting of oversized chunk communities is not fully implemented. Fourth, the entity layer is lightweight and does not perform relation extraction. Finally, ROUGE measures lexical overlap and does not directly establish factual consistency.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+This paper proposes a training-free graph-guided Extract-Support framework for Vietnamese long-document and multi-document summarization. The method combines overlapping segment evidence, semantic chunks, lightweight entity and factual phrase processing, sparse weighted chunk graphs, Leiden chunk communities, and source-only support propagation. The next step is to run the planned 100-sample experiments on VN-MDS, ViMs, and Multi-News and replace the TODO result tables with verified outputs.
+
+\section*{Ethics Statement}
+
+This study uses existing summarization datasets and does not involve new human-subject data collection. Dataset licenses and access conditions must be verified before submission.
+
+\section*{Data Availability}
+
+The experiments use local loaders for VN-MDS and ViMs and a HuggingFace loader for Multi-News. Exact dataset versions, sample identifiers, preprocessing scripts, and generated result CSVs will be documented before submission.
+
+\section*{AI Usage Disclosure}
+
+AI assistance was used to help plan the manuscript, draft text, and implement experiment scaffolding. All claims, citations, data processing decisions, and final results require human verification before submission.
+
+\bibliography{custom}
+
+\end{document}

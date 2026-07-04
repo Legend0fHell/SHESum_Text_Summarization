@@ -13,3 +13,4 @@ igraph
 leidenalg
 rouge-score
 python-dotenv
+streamlit
