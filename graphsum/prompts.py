@@ -1,35 +1,76 @@
 from __future__ import annotations
 
 
-TOPIC_EXTRACT_SUPPORT_PROMPT = """You are a careful long-document summarizer. Write in {language_name}.
+TOPIC_EXTRACT_SUPPORT_PROMPT = """[Instruction]
+You are a multilingual, fact-grounded community summarization agent. Write in {language_name}. Your role is to summarize one chunk community using ordered source text and selected source support.
 
-Task:
-Summarize the topic using the source text. Use the source support to check factual accuracy, preserve important entities, factual phrases, numbers, dates, and contrasting claims. Do not invent facts.
+[Objective]
+Given:
+1. Ordered source text from one chunk community.
+2. Source support selected from original source segments.
 
+Produce a coherent community-level summary that:
+- captures the central event, actors, actions, causes, consequences, and important context;
+- preserves salient entities, numbers, dates, locations, and factual phrases;
+- acknowledges disagreement, uncertainty, or contrast when the sources support it;
+- remains strictly grounded in the provided input and does not add external knowledge.
+
+[Process]
+1. Identify Core Content
+ - Determine the main event or situation, the central actors, and the most important actions or outcomes.
+ - Use the ordered source text for coverage and narrative flow.
+2. Verify Against Support
+ - Prefer claims grounded in the selected source support when details are ambiguous.
+ - Keep concrete facts only when supported by the source text or source support.
+3. Compose
+ - Write clear, neutral prose in inverted-pyramid style: most important information first, context after.
+ - Merge repeated information once.
+ - Do not mention "source text", "source support", "chunk", "community", "segment", "prompt", or the summarization process.
+
+[Input]
 Source text:
 ---
 {source_text}
 ---
 
-Source support, selected from the original source tri-sentence units:
+Source support:
 ---
 {source_support}
 ---
 
-Instructions:
-- Cover the central events, actors, causes, consequences, and important context.
-- Prefer claims grounded in the source support when the source text is ambiguous.
-- Preserve contrast or uncertainty when sources disagree.
-- Do not mention "source text", "support", "chunk", "topic", or "summary" in the output.
-- Return only the summary.
+[Output]
+Return ONLY the final summary as plain text. Do not include labels, headings, bullet points, metadata, JSON, or analysis.
 """
 
 
-MERGE_EXTRACT_SUPPORT_PROMPT = """You are merging topic summaries into one coherent final summary. Write in {language_name}.
+MERGE_EXTRACT_SUPPORT_PROMPT = """[Instruction]
+You are a multilingual, metadata-aware summary synthesizer. Write in {language_name}. Your task is to fuse multiple community-level summaries into one coherent final summary while using source-derived support only for factual verification.
 
-The gist must be based on the topic summaries. Use the supporting source-derived text only to check factual accuracy and avoid unsupported facts.
+[Objective]
+Given:
+1. Community-level summaries generated from chunk communities.
+2. Source-derived support inherited from the original source segments.
 
-Topic summaries:
+Produce a final integrated summary that:
+- preserves the main information from all important community summaries;
+- emphasizes globally central facts and relationships;
+- removes redundancy across communities;
+- keeps numerical, temporal, and entity-specific details only when supported;
+- explicitly preserves major disagreements, caveats, or uncertainty when supported.
+
+[Process]
+1. Rank and Integrate
+ - Identify which community summaries contain the global lead, supporting context, consequences, and caveats.
+ - Merge repeated claims once and preserve complementary details.
+2. Verify and Resolve
+ - Use source-derived support to check factual accuracy.
+ - If summaries conflict, state the contrast only when the source-derived support justifies it; otherwise use cautious wording.
+3. Compose Final Summary
+ - Use inverted-pyramid structure: lead first, context and consequences after.
+ - Do not reference "community summaries", "source support", "metadata", "chunks", "segments", or the summarization process.
+
+[Input]
+Community summaries:
 ---
 {topic_summaries}
 ---
@@ -39,32 +80,39 @@ Source-derived support:
 {source_support}
 ---
 
-Instructions:
-- Merge repeated information once.
-- Preserve the main information from all topic summaries.
-- Keep factual details only when supported.
-- Preserve major disagreements, caveats, or uncertainty.
-- Do not mention "topic summaries", "source support", or the summarization process.
-- Return only the final summary.
+[Output]
+Return ONLY one final summary as plain text. Do not include labels, headings, bullet points, metadata, JSON, or analysis.
 """
 
 
-DIRECT_SUMMARY_PROMPT = """You are a careful multi-document summarizer. Write in {language_name}.
+DIRECT_SUMMARY_PROMPT = """[Instruction]
+You are a multilingual, fact-grounded multi-document summarization model. Write in {language_name}. Do not add information that is not present in the source documents.
 
-Task:
-Summarize the following source documents directly. Do not use external knowledge. Do not invent facts.
+[Objective]
+Given a collection of related source documents, produce a concise, neutral summary that:
+- captures the main point, key entities, events, relationships, numbers, dates, and causal links;
+- merges repeated information across documents;
+- preserves critical nuance, disagreement, uncertainty, or contrast when present;
+- avoids opinion, hype, speculation, and hallucination.
 
+[Process]
+1. Multi-Document Scan
+ - Identify recurring themes, central actors, core events, major claims, and salient factual details.
+2. De-duplicate and Reconcile
+ - Merge repeated details.
+ - If conflicting claims exist, briefly note the disagreement without resolving it beyond what the documents state.
+3. Compose
+ - Write clear, neutral prose in inverted-pyramid style.
+ - Do not mention "source documents", "prompt", or the summarization process.
+
+[Input]
 Source documents:
 ---
 {source_text}
 ---
 
-Instructions:
-- Cover the central events, actors, causes, consequences, and important context.
-- Preserve important entities, factual phrases, numbers, dates, and contrasting claims.
-- Preserve major disagreements, caveats, or uncertainty when sources disagree.
-- Do not mention "source documents", "prompt", or the summarization process.
-- Return only the summary.
+[Output]
+Return ONLY the final summary as plain text. Do not include labels, headings, bullet points, metadata, JSON, or analysis.
 """
 
 
