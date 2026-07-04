@@ -28,6 +28,13 @@ class GraphWeights:
     beta: float
     gamma: float
 
+    def __post_init__(self) -> None:
+        values = (self.alpha, self.beta, self.gamma)
+        if any(value < -1e-9 for value in values):
+            raise ValueError("Graph weights must be non-negative and satisfy alpha + beta + gamma = 1")
+        if abs(sum(values) - 1.0) > 1e-6:
+            raise ValueError("Graph weights must satisfy alpha + beta + gamma = 1")
+
 
 def weight_grid() -> list[GraphWeights]:
     values = []

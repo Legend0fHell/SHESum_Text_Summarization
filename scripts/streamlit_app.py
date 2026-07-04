@@ -111,7 +111,8 @@ def main() -> None:
             embedding_base_url = st.text_input("Embedding base URL", env_embedding.base_url or "")
             embedding_api_key = st.text_input("Embedding API key override", "", type="password")
             alpha = st.number_input("alpha", min_value=0.0, max_value=1.0, value=env_experiment.alpha, step=0.05)
-            beta = st.number_input("beta", min_value=0.0, max_value=1.0, value=env_experiment.beta, step=0.05)
+            beta_max = max(0.0, 1.0 - alpha)
+            beta = st.number_input("beta", min_value=0.0, max_value=beta_max, value=min(env_experiment.beta, beta_max), step=0.05)
             pacsum_beta = st.number_input("PACSUM beta", value=env_experiment.pacsum_beta, step=0.1)
             pacsum_lambda1 = st.number_input("PACSUM lambda1", value=env_experiment.pacsum_lambda1, step=0.1)
             pacsum_lambda2 = st.number_input("PACSUM lambda2", value=env_experiment.pacsum_lambda2, step=0.1)
@@ -206,7 +207,7 @@ def _render_result(result: dict[str, object]) -> None:
     rouge = result["rouge"]
 
     st.subheader(f"Result: {result['sample_id']} / {result['run_mode']}")
-    metric_cols = st.columns(8)
+    metric_cols = st.columns(9)
     metric_cols[0].metric("ROUGE-1", f"{rouge['rouge1']:.4f}")
     metric_cols[1].metric("ROUGE-2", f"{rouge['rouge2']:.4f}")
     metric_cols[2].metric("ROUGE-L", f"{rouge['rougeL']:.4f}")
@@ -214,7 +215,8 @@ def _render_result(result: dict[str, object]) -> None:
     metric_cols[4].metric("Output tokens", output.output_tokens)
     metric_cols[5].metric("LLM calls", output.llm_calls)
     metric_cols[6].metric("Chunks", output.chunk_count)
-    metric_cols[7].metric("Seconds", f"{result['runtime_seconds']:.2f}")
+    metric_cols[7].metric("Communities", output.community_count)
+    metric_cols[8].metric("Seconds", f"{result['runtime_seconds']:.2f}")
 
     tabs = st.tabs(["Progress", "Segments", "Chunks & Entities", "Dedup", "Communities", "KNN Graph", "Summary Graph", "Final Summary"])
     with tabs[0]:

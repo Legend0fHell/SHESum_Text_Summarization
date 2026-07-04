@@ -1,6 +1,6 @@
 # Stage 2 Experiment Checklist
 
-Use this checklist to fill the TODO tables in `paper/draft.md`. Do not report dry-run LLM or hash-embedding outputs as paper results.
+Use this checklist to fill the TODO tables in `agent_docs/draft.md` and `final_report/latex/acl_latex.tex`. Do not report dry-run LLM or hash-embedding outputs as paper results.
 
 ## Evaluation Rules
 

@@ -20,7 +20,7 @@ from .salience import compact_unit_texts, select_centroid_topk, select_pacsum
 
 @dataclass
 class PipelineConfig:
-    salience_method: str = "e1"
+    salience_method: str = "e2b"
     graph_weights: GraphWeights = GraphWeights(0.1, 0.2, 0.7)
     k_neighbors: int = 8
     evidence_max_tokens: int = 400
@@ -48,7 +48,7 @@ class PipelineOutput:
     output_tokens: int
     llm_calls: int
     chunk_count: int
-    topic_count: int
+    community_count: int
     trace: "PipelineTrace | None" = None
 
 
@@ -165,39 +165,39 @@ def run_sample(
     _trace_support(trace, support_by_chunk, unit_lookup)
 
     _record_progress(trace, progress_callback, "graph", "Building chunk graph and Leiden chunk communities")
-    topics, graph_edges = _build_communities(chunks, config, dedup_result)
+    communities, graph_edges = _build_communities(chunks, config, dedup_result)
     _trace_graph(trace, chunks, graph_edges)
-    _trace_communities(trace, chunks, topics)
+    _trace_communities(trace, chunks, communities)
 
     _record_progress(trace, progress_callback, "summarize", "Generating community-level summaries")
-    topic_results: list[LLMResult] = []
-    topic_support_ids: list[list[str]] = []
-    for topic in topics:
-        topic_chunks = [chunks[idx] for idx in topic]
-        prompt_chunks = _deduplicate_community_chunks(topic_chunks, chunks, dedup_result, config, trace, len(topic_results))
+    community_results: list[LLMResult] = []
+    community_support_ids: list[list[str]] = []
+    for community in communities:
+        community_chunks = [chunks[idx] for idx in community]
+        prompt_chunks = _deduplicate_community_chunks(community_chunks, chunks, dedup_result, config, trace, len(community_results))
         support_ids = []
         for chunk in prompt_chunks:
             support_ids.extend(support_by_chunk.get(chunk.chunk_id, []))
-        topic_support_ids.append(support_ids)
-        prompt = _topic_prompt(prompt_chunks, compact_unit_texts(support_ids, unit_lookup), sample.language)
-        topic_results.append(llm.summarize(prompt))
-        _trace_community_summary(trace, len(topic_results) - 1, prompt_chunks, prompt, topic_results[-1])
-    if len(topic_results) == 1:
-        final = topic_results[0]
+        community_support_ids.append(support_ids)
+        prompt = _community_prompt(prompt_chunks, compact_unit_texts(support_ids, unit_lookup), sample.language)
+        community_results.append(llm.summarize(prompt))
+        _trace_community_summary(trace, len(community_results) - 1, prompt_chunks, prompt, community_results[-1])
+    if len(community_results) == 1:
+        final = community_results[0]
     else:
         _record_progress(trace, progress_callback, "merge", "Merging community summaries with source-only support")
-        merged = "\n".join(result.text for result in topic_results)
-        support_pool_ids = _select_higher_level_support(topic_support_ids, unit_lookup, merged, embedder, config)
+        merged = "\n".join(result.text for result in community_results)
+        support_pool_ids = _select_higher_level_support(community_support_ids, unit_lookup, merged, embedder, config)
         support_pool = compact_unit_texts(support_pool_ids, unit_lookup, max_tokens=config.evidence_max_tokens)
         merge_prompt = _merge_prompt(merged, support_pool, sample.language)
         final = llm.summarize(merge_prompt)
-        final.input_tokens += sum(result.input_tokens for result in topic_results)
-        final.output_tokens += sum(result.output_tokens for result in topic_results)
-        final.calls += sum(result.calls for result in topic_results)
+        final.input_tokens += sum(result.input_tokens for result in community_results)
+        final.output_tokens += sum(result.output_tokens for result in community_results)
+        final.calls += sum(result.calls for result in community_results)
         _trace_summary_step(trace, "merge", "final_merge", merge_prompt, final)
-    _trace_summary_graph(trace, chunks, topics, final.text)
+    _trace_summary_graph(trace, chunks, communities, final.text)
     _record_progress(trace, progress_callback, "done", "Finished summarization")
-    return PipelineOutput(final.text, final.input_tokens, final.output_tokens, final.calls, len(chunks), len(topics), trace)
+    return PipelineOutput(final.text, final.input_tokens, final.output_tokens, final.calls, len(chunks), len(communities), trace)
 
 
 def run_direct_sample(
@@ -270,7 +270,7 @@ def _select_support(
     return support
 
 
-def _make_topics(chunks: list[Chunk], config: PipelineConfig) -> list[list[int]]:
+def _make_communities(chunks: list[Chunk], config: PipelineConfig) -> list[list[int]]:
     return _build_communities(chunks, config, ChunkDedupResult({}, {}, []))[0]
 
 
@@ -303,7 +303,7 @@ def _build_communities(
 
 
 def _deduplicate_community_chunks(
-    topic_chunks: list[Chunk],
+    community_chunks: list[Chunk],
     all_chunks: list[Chunk],
     dedup_result: ChunkDedupResult,
     config: PipelineConfig,
@@ -311,9 +311,9 @@ def _deduplicate_community_chunks(
     community_index: int,
 ) -> list[Chunk]:
     if not config.community_dedup or not dedup_result.groups:
-        return topic_chunks
+        return community_chunks
     index_by_chunk_id = {chunk.chunk_id: idx for idx, chunk in enumerate(all_chunks)}
-    community_indices = [index_by_chunk_id[chunk.chunk_id] for chunk in topic_chunks]
+    community_indices = [index_by_chunk_id[chunk.chunk_id] for chunk in community_chunks]
     community_index_set = set(community_indices)
     kept_indices: list[int] = []
     skipped_indices: list[int] = []
@@ -333,22 +333,22 @@ def _deduplicate_community_chunks(
             skipped_indices.append(idx)
     _trace_community_dedup(trace, all_chunks, dedup_result, community_index, kept_indices, skipped_indices)
     kept_chunks = [all_chunks[idx] for idx in sorted(dict.fromkeys(kept_indices), key=lambda item: (all_chunks[item].document_id, all_chunks[item].position))]
-    return kept_chunks or topic_chunks
+    return kept_chunks or community_chunks
 
 
 def _select_higher_level_support(
-    topic_support_ids: list[list[str]],
+    community_support_ids: list[list[str]],
     unit_lookup: dict[str, TriSentenceUnit],
-    merged_topic_summaries: str,
+    merged_community_summaries: str,
     embedder: Embedder,
     config: PipelineConfig,
 ) -> list[str]:
-    support_ids = list(dict.fromkeys(unit_id for topic_ids in topic_support_ids for unit_id in topic_ids))
+    support_ids = list(dict.fromkeys(unit_id for community_ids in community_support_ids for unit_id in community_ids))
     support_units = [unit_lookup[unit_id] for unit_id in support_ids if unit_id in unit_lookup]
     if not support_units:
         return []
     if config.salience_method == "e1":
-        merged_embedding = embedder.encode([merged_topic_summaries])[0]
+        merged_embedding = embedder.encode([merged_community_summaries])[0]
         return select_centroid_topk(support_units, merged_embedding, config.evidence_max_tokens)
     if config.salience_method == "e2a":
         return select_pacsum(
@@ -371,7 +371,7 @@ def _select_higher_level_support(
     raise ValueError(f"Unknown salience method: {config.salience_method}")
 
 
-def _topic_prompt(chunks: list[Chunk], support: str, language: str) -> str:
+def _community_prompt(chunks: list[Chunk], support: str, language: str) -> str:
     chunk_text = "\n\n".join(chunk.text for chunk in sorted(chunks, key=lambda c: (c.document_id, c.position)))
     return render_topic_prompt(chunk_text, support, language)
 

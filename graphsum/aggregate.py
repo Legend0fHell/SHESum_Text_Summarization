@@ -14,7 +14,7 @@ NUMERIC_COLUMNS = [
     "llm_calls",
     "runtime_seconds",
     "chunk_count",
-    "topic_count",
+    "community_count",
 ]
 
 GROUP_COLUMNS = [

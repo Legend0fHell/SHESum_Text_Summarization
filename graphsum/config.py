@@ -80,7 +80,7 @@ def experiment_settings() -> ExperimentSettings:
         dataset=_empty_to_none(os.environ.get("GRAPHSUM_DATASET")),
         data_root=os.environ.get("GRAPHSUM_DATA_ROOT", "datasets"),
         limit=_int_env("GRAPHSUM_LIMIT", 3),
-        salience=os.environ.get("GRAPHSUM_SALIENCE", "e1"),
+        salience=os.environ.get("GRAPHSUM_SALIENCE", "e2b"),
         llm=os.environ.get("GRAPHSUM_LLM_BACKEND", "dry_run"),
         dry_embed=_bool_env("GRAPHSUM_DRY_EMBED", False),
         chunking=os.environ.get("GRAPHSUM_CHUNKING", "semantic"),

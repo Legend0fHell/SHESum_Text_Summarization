@@ -108,7 +108,7 @@ def main() -> None:
                     "llm_calls": output.llm_calls,
                     "runtime_seconds": runtime_seconds,
                     "chunk_count": output.chunk_count,
-                    "topic_count": output.topic_count,
+                    "community_count": output.community_count,
                     "generated_summary": output.summary,
                 }
             )
@@ -189,7 +189,7 @@ def main() -> None:
                     "llm_calls": output.llm_calls,
                     "runtime_seconds": runtime_seconds,
                     "chunk_count": output.chunk_count,
-                    "topic_count": output.topic_count,
+                    "community_count": output.community_count,
                     "generated_summary": output.summary,
                 }
             )

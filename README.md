@@ -51,13 +51,13 @@ Experiment defaults can also be set through `.env`, including `GRAPHSUM_DATASET`
 Equivalent CLI overrides:
 
 ```powershell
-python scripts/run_graphsum.py --dataset vn_mds --data-root datasets --limit 5 --salience e1 --embedding-backend openai_compatible --embedding-model BAAI/bge-m3 --embedding-base-url http://localhost:7997/v1 --llm openai_compatible --model Qwen3.6-35B --base-url http://localhost:8000/v1
+python scripts/run_graphsum.py --dataset vn_mds --data-root datasets --limit 5 --salience e2b --embedding-backend openai_compatible --embedding-model BAAI/bge-m3 --embedding-base-url http://localhost:7997/v1 --llm openai_compatible --model Qwen3.6-35B --base-url http://localhost:8000/v1
 ```
 
 Dry-run smoke test:
 
 ```powershell
-python scripts/run_graphsum.py --dataset vn_mds --data-root datasets --limit 2 --salience e1 --llm dry_run --dry-embed
+python scripts/run_graphsum.py --dataset vn_mds --data-root datasets --limit 2 --salience e2b --llm dry_run --dry-embed
 ```
 
 The default chunker is paragraph-aware semantic chunking. Paragraphs are treated as structural candidates first; oversized paragraphs are split with LangChain Experimental `SemanticChunker`, and adjacent small paragraph candidates are merged up to the configured token range. Use `--chunking simple` only when intentionally running the explicit simple-chunking ablation.
@@ -70,13 +70,13 @@ Prompt templates live in `graphsum/prompts.py`:
 OpenAI-compatible local LLM endpoint, for example vLLM serving Qwen or Gemma:
 
 ```powershell
-python scripts/run_graphsum.py --dataset vn_mds --data-root datasets --limit 5 --salience e1 --llm openai_compatible --model <model-name> --base-url http://localhost:8000/v1
+python scripts/run_graphsum.py --dataset vn_mds --data-root datasets --limit 5 --salience e2b --llm openai_compatible --model <model-name> --base-url http://localhost:8000/v1
 ```
 
 Validation grid:
 
 ```powershell
-python scripts/run_graphsum.py --dataset vn_mds --data-root datasets --limit 5 --salience e1 --grid --llm dry_run --dry-embed --output runs/grid_vn_mds.csv
+python scripts/run_graphsum.py --dataset vn_mds --data-root datasets --limit 5 --salience e2b --grid --llm dry_run --dry-embed --output runs/grid_vn_mds.csv
 ```
 
 Aggregate one or more result files:
@@ -87,7 +87,7 @@ python scripts/summarize_results.py runs/graphsum_results.csv --output runs/summ
 
 `scripts/run_graphsum.py` also accepts `--aggregate-output <path>` to write aggregate metrics immediately after an experiment. For `--llm openai_compatible`, the runner automatically writes `<output_stem>_summary.csv` when `--aggregate-output` is not provided.
 
-Recorded metrics include ROUGE-1, ROUGE-2, ROUGE-L, ROUGE backend, input tokens, output tokens, LLM calls, runtime seconds, chunk count, community/topic count, and the generated summary text. ROUGE is computed with the required `rouge-score` package.
+Recorded metrics include ROUGE-1, ROUGE-2, ROUGE-L, ROUGE backend, input tokens, output tokens, LLM calls, runtime seconds, chunk count, community count, and the generated summary text. ROUGE is computed with the required `rouge-score` package.
 
 `dry_run` and `--dry-embed` are for pipeline debugging only and must not be reported as paper results.
 
@@ -100,7 +100,7 @@ pip install igraph leidenalg rouge-score
 Sequential no-graph baseline:
 
 ```powershell
-python scripts/run_graphsum.py --dataset vn_mds --data-root datasets --limit 5 --salience e1 --no-graph --llm openai_compatible --model <model-name> --base-url http://localhost:8000/v1
+python scripts/run_graphsum.py --dataset vn_mds --data-root datasets --limit 5 --salience e2b --no-graph --llm openai_compatible --model <model-name> --base-url http://localhost:8000/v1
 ```
 
 Pure LLM baseline:

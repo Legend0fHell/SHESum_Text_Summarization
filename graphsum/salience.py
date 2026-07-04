@@ -53,7 +53,7 @@ def select_pacsum(
 
 
 def compact_unit_texts(unit_ids: list[str], unit_lookup: dict[str, TriSentenceUnit], max_tokens: int | None = None) -> str:
-    # Merge overlapping tri-sentence windows into sentence-ordered source spans.
+    # Merge overlapping segment windows into splitter-output-ordered source spans.
     ordered = sorted((unit_lookup[uid] for uid in unit_ids if uid in unit_lookup), key=lambda u: (u.document_id, u.center_index))
     seen = set()
     texts = []
