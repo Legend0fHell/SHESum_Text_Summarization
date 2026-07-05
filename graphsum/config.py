@@ -53,6 +53,8 @@ class ExperimentSettings:
     dedup_require_shared_phrase: bool
     duplicate_edge_factor: float
     community_dedup: bool
+    max_summary_words: int | None
+    max_output_tokens: int | None
     output: str
     aggregate_output: str | None
 
@@ -102,6 +104,8 @@ def experiment_settings() -> ExperimentSettings:
         dedup_require_shared_phrase=_bool_env("GRAPHSUM_DEDUP_REQUIRE_SHARED_PHRASE", False),
         duplicate_edge_factor=_float_env("GRAPHSUM_DUPLICATE_EDGE_FACTOR", 0.35),
         community_dedup=_bool_env("GRAPHSUM_COMMUNITY_DEDUP", True),
+        max_summary_words=_optional_int_env("GRAPHSUM_MAX_SUMMARY_WORDS"),
+        max_output_tokens=_optional_int_env("GRAPHSUM_MAX_OUTPUT_TOKENS"),
         output=os.environ.get("GRAPHSUM_OUTPUT", "runs/graphsum_results.csv"),
         aggregate_output=_empty_to_none(os.environ.get("GRAPHSUM_AGGREGATE_OUTPUT")),
     )

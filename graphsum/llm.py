@@ -15,12 +15,12 @@ class LLMResult:
 
 
 class BaseLLM:
-    def summarize(self, prompt: str) -> LLMResult:
+    def summarize(self, prompt: str, max_tokens: int | None = None) -> LLMResult:
         raise NotImplementedError
 
 
 class DryRunLLM(BaseLLM):
-    def summarize(self, prompt: str) -> LLMResult:
+    def summarize(self, prompt: str, max_tokens: int | None = None) -> LLMResult:
         # Deterministic placeholder for pipeline debugging. Do not report as a paper result.
         evidence = (
             _extract_prompt_block(prompt, "Source support")
@@ -30,6 +30,8 @@ class DryRunLLM(BaseLLM):
         )
         sentences = re.split(r"(?<=[.!?。！？])\s+", evidence.strip())
         text = " ".join(sentences[:5]).strip()[:2000]
+        if max_tokens is not None and max_tokens > 0:
+            text = " ".join(text.split()[:max_tokens])
         return LLMResult(text=text, input_tokens=count_tokens(prompt), output_tokens=count_tokens(text))
 
 
@@ -41,14 +43,19 @@ class OpenAICompatibleLLM(BaseLLM):
         self.api_key = api_key or settings.api_key
         self.temperature = temperature
 
-    def summarize(self, prompt: str) -> LLMResult:
+    def summarize(self, prompt: str, max_tokens: int | None = None) -> LLMResult:
         from langchain_openai import ChatOpenAI
 
+        kwargs = {
+            "model": self.model,
+            "base_url": self.base_url,
+            "api_key": self.api_key,
+            "temperature": self.temperature,
+        }
+        if max_tokens is not None and max_tokens > 0:
+            kwargs["max_tokens"] = max_tokens
         chat = ChatOpenAI(
-            model=self.model,
-            base_url=self.base_url,
-            api_key=self.api_key,
-            temperature=self.temperature,
+            **kwargs,
         )
         response = chat.invoke(prompt)
         text = str(response.content).strip()

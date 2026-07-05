@@ -46,7 +46,7 @@ $env:GRAPHSUM_LLM_API_KEY="ollama"
 $env:GRAPHSUM_LLM_TEMPERATURE="0.0"
 ```
 
-Experiment defaults can also be set through `.env`, including `GRAPHSUM_DATASET`, `GRAPHSUM_LIMIT`, `GRAPHSUM_SALIENCE`, `GRAPHSUM_CHUNKING`, `GRAPHSUM_TARGET_MIN_TOKENS`, `GRAPHSUM_TARGET_MAX_TOKENS`, `GRAPHSUM_SEMANTIC_BREAKPOINT_PERCENTILE`, `GRAPHSUM_SEMANTIC_MIN_CHUNK_TOKENS`, duplicate-aware graph/prompt settings, `GRAPHSUM_NO_GRAPH`, `GRAPHSUM_PURE_LLM`, `GRAPHSUM_ALPHA`, `GRAPHSUM_BETA`, PACSUM settings, `GRAPHSUM_ENTITY_MERGE_THRESHOLD`, `GRAPHSUM_OUTPUT`, and `GRAPHSUM_AGGREGATE_OUTPUT`.
+Experiment defaults can also be set through `.env`, including `GRAPHSUM_DATASET`, `GRAPHSUM_LIMIT`, `GRAPHSUM_SALIENCE`, `GRAPHSUM_CHUNKING`, `GRAPHSUM_TARGET_MIN_TOKENS`, `GRAPHSUM_TARGET_MAX_TOKENS`, `GRAPHSUM_SEMANTIC_BREAKPOINT_PERCENTILE`, `GRAPHSUM_SEMANTIC_MIN_CHUNK_TOKENS`, duplicate-aware graph/prompt settings, `GRAPHSUM_MAX_SUMMARY_WORDS`, `GRAPHSUM_MAX_OUTPUT_TOKENS`, `GRAPHSUM_NO_GRAPH`, `GRAPHSUM_PURE_LLM`, `GRAPHSUM_ALPHA`, `GRAPHSUM_BETA`, PACSUM settings, `GRAPHSUM_ENTITY_MERGE_THRESHOLD`, `GRAPHSUM_OUTPUT`, and `GRAPHSUM_AGGREGATE_OUTPUT`.
 
 Equivalent CLI overrides:
 
@@ -87,7 +87,7 @@ python scripts/summarize_results.py runs/graphsum_results.csv --output runs/summ
 
 `scripts/run_graphsum.py` also accepts `--aggregate-output <path>` to write aggregate metrics immediately after an experiment. For `--llm openai_compatible`, the runner automatically writes `<output_stem>_summary.csv` when `--aggregate-output` is not provided.
 
-Recorded metrics include ROUGE-1, ROUGE-2, ROUGE-L, ROUGE backend, input tokens, output tokens, LLM calls, runtime seconds, chunk count, community count, and the generated summary text. ROUGE is computed with the required `rouge-score` package.
+Recorded metrics include ROUGE-1, ROUGE-2, ROUGE-L, ROUGE backend/tokenizer, input tokens, output tokens, LLM calls, runtime seconds, chunk count, community count, summary budgets, and the generated summary text. Vietnamese ROUGE follows the MoA-MDS release default: `rouge-score` with character-level `unicode_char` tokenization, no stemming, and max-tuple reference selection over ROUGE-1/2/L F1. VN-MDS and ViMs also default to MoA-MDS summary budgets: VN-MDS 180 words / 300 output tokens; ViMs 235 words / 380 output tokens.
 
 `dry_run` and `--dry-embed` are for pipeline debugging only and must not be reported as paper results.
 

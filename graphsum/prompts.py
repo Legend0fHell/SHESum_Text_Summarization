@@ -15,6 +15,12 @@ Produce a coherent community-level summary that:
 - acknowledges disagreement, uncertainty, or contrast when the sources support it;
 - remains strictly grounded in the provided input and does not add external knowledge.
 
+[Dataset guidance]
+{dataset_guidance}
+
+[Length constraint]
+{length_constraint}
+
 [Process]
 1. Identify Core Content
  - Determine the main event or situation, the central actors, and the most important actions or outcomes.
@@ -58,6 +64,12 @@ Produce a final integrated summary that:
 - keeps numerical, temporal, and entity-specific details only when supported;
 - explicitly preserves major disagreements, caveats, or uncertainty when supported.
 
+[Dataset guidance]
+{dataset_guidance}
+
+[Length constraint]
+{length_constraint}
+
 [Process]
 1. Rank and Integrate
  - Identify which community summaries contain the global lead, supporting context, consequences, and caveats.
@@ -95,6 +107,12 @@ Given a collection of related source documents, produce a concise, neutral summa
 - preserves critical nuance, disagreement, uncertainty, or contrast when present;
 - avoids opinion, hype, speculation, and hallucination.
 
+[Dataset guidance]
+{dataset_guidance}
+
+[Length constraint]
+{length_constraint}
+
 [Process]
 1. Multi-Document Scan
  - Identify recurring themes, central actors, core events, major claims, and salient factual details.
@@ -120,24 +138,69 @@ def language_name(language: str) -> str:
     return "Vietnamese" if language == "vi" else "English"
 
 
-def render_topic_prompt(source_text: str, source_support: str, language: str) -> str:
+def render_topic_prompt(
+    source_text: str,
+    source_support: str,
+    language: str,
+    dataset: str = "",
+    max_summary_words: int | None = None,
+) -> str:
     return TOPIC_EXTRACT_SUPPORT_PROMPT.format(
         language_name=language_name(language),
+        dataset_guidance=dataset_guidance(language, dataset),
+        length_constraint=length_constraint(max_summary_words),
         source_text=source_text.strip(),
         source_support=source_support.strip(),
     )
 
 
-def render_merge_prompt(topic_summaries: str, source_support: str, language: str) -> str:
+def render_merge_prompt(
+    topic_summaries: str,
+    source_support: str,
+    language: str,
+    dataset: str = "",
+    max_summary_words: int | None = None,
+) -> str:
     return MERGE_EXTRACT_SUPPORT_PROMPT.format(
         language_name=language_name(language),
+        dataset_guidance=dataset_guidance(language, dataset),
+        length_constraint=length_constraint(max_summary_words),
         topic_summaries=topic_summaries.strip(),
         source_support=source_support.strip(),
     )
 
 
-def render_direct_prompt(source_text: str, language: str) -> str:
+def render_direct_prompt(source_text: str, language: str, dataset: str = "", max_summary_words: int | None = None) -> str:
     return DIRECT_SUMMARY_PROMPT.format(
         language_name=language_name(language),
+        dataset_guidance=dataset_guidance(language, dataset),
+        length_constraint=length_constraint(max_summary_words),
         source_text=source_text.strip(),
     )
+
+
+def dataset_guidance(language: str, dataset: str) -> str:
+    if language != "vi":
+        return "No additional dataset-level guidance."
+    if dataset == "vn_mds":
+        return (
+            "VN-MDS is a Vietnamese multi-document news summarization dataset with extractive reference style. "
+            "Preserve Vietnamese source wording for named entities, dates, numbers, locations, and core event phrases. "
+            "Use graph/community/entity evidence only as a factual checklist; do not let graph-oriented phrasing dominate the final prose."
+        )
+    if dataset == "vims":
+        return (
+            "ViMs is a Vietnamese multi-document news summarization dataset with strong lead and source-wording bias. "
+            "Preserve Vietnamese source wording for names, organizations, dates, numbers, campaign names, and core event phrases. "
+            "Use graph/community/entity evidence only as a factual checklist; do not let graph-oriented phrasing dominate the final prose."
+        )
+    return (
+        "Write entirely in Vietnamese. Preserve Vietnamese source wording for named entities, dates, numbers, locations, "
+        "and core event phrases when they are salient and supported."
+    )
+
+
+def length_constraint(max_summary_words: int | None) -> str:
+    if max_summary_words is None or max_summary_words <= 0:
+        return "No explicit word limit."
+    return f"The final summary must not exceed {max_summary_words} words. Prefer complete sentences; do not end mid-sentence."

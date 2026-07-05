@@ -35,6 +35,8 @@ GROUP_COLUMNS = [
     "dedup_require_shared_phrase",
     "duplicate_edge_factor",
     "community_dedup",
+    "max_summary_words",
+    "max_output_tokens",
     "embedding_backend",
     "embedding_model",
     "llm",
@@ -44,6 +46,7 @@ GROUP_COLUMNS = [
     "pacsum_lambda2",
     "entity_merge_threshold",
     "rouge_backend",
+    "rouge_tokenizer",
 ]
 
 

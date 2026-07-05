@@ -16,7 +16,7 @@ from graphsum.data import load_samples
 from graphsum.evaluate import rouge_scores, write_csv
 from graphsum.graph import GraphWeights, weight_grid
 from graphsum.llm import make_llm
-from graphsum.pipeline import Embedder, PipelineConfig, run_direct_sample, run_sample
+from graphsum.pipeline import Embedder, PipelineConfig, resolve_summary_budget, run_direct_sample, run_sample
 
 
 def main() -> None:
@@ -46,6 +46,8 @@ def main() -> None:
     parser.add_argument("--dedup-require-shared-phrase", action=argparse.BooleanOptionalAction, default=settings.dedup_require_shared_phrase)
     parser.add_argument("--duplicate-edge-factor", type=float, default=settings.duplicate_edge_factor)
     parser.add_argument("--community-dedup", action=argparse.BooleanOptionalAction, default=settings.community_dedup)
+    parser.add_argument("--max-summary-words", type=int, default=settings.max_summary_words, help="Final summary word budget. Defaults to dataset-specific MoA values for VN-MDS/ViMs.")
+    parser.add_argument("--max-output-tokens", type=int, default=settings.max_output_tokens, help="LLM output token cap. Defaults to dataset-specific MoA values for VN-MDS/ViMs.")
     parser.add_argument("--grid", action=argparse.BooleanOptionalAction, default=settings.grid, help="Run the alpha/beta/gamma graph-weight grid.")
     parser.add_argument("--alpha", type=float, default=settings.alpha)
     parser.add_argument("--beta", type=float, default=settings.beta)
@@ -64,10 +66,16 @@ def main() -> None:
     rows = []
     if args.pure_llm:
         for sample in samples:
+            summary_budget = resolve_summary_budget(sample.dataset, args.max_summary_words, args.max_output_tokens)
             started = time.perf_counter()
-            output = run_direct_sample(sample, llm)
+            output = run_direct_sample(
+                sample,
+                llm,
+                max_summary_words=args.max_summary_words,
+                max_output_tokens=args.max_output_tokens,
+            )
             runtime_seconds = time.perf_counter() - started
-            rouge = rouge_scores(output.summary, sample.references)
+            rouge = rouge_scores(output.summary, sample.references, sample.language)
             rows.append(
                 {
                     "dataset": sample.dataset,
@@ -88,6 +96,8 @@ def main() -> None:
                     "dedup_require_shared_phrase": "",
                     "duplicate_edge_factor": "",
                     "community_dedup": "",
+                    "max_summary_words": summary_budget.max_summary_words or "",
+                    "max_output_tokens": summary_budget.max_output_tokens or "",
                     "embedding_backend": "none",
                     "embedding_model": "none",
                     "llm": args.llm,
@@ -100,6 +110,7 @@ def main() -> None:
                     "rouge2": rouge["rouge2"],
                     "rougeL": rouge["rougeL"],
                     "rouge_backend": rouge["rouge_backend"],
+                    "rouge_tokenizer": rouge["rouge_tokenizer"],
                     "reference_count": rouge["reference_count"],
                     "selected_reference_index": rouge["selected_reference_index"],
                     "reference_selector": rouge["reference_selector"],
@@ -143,12 +154,15 @@ def main() -> None:
             pacsum_lambda1=args.pacsum_lambda1,
             pacsum_lambda2=args.pacsum_lambda2,
             entity_merge_threshold=args.entity_merge_threshold,
+            max_summary_words=args.max_summary_words,
+            max_output_tokens=args.max_output_tokens,
         )
         for sample in samples:
+            summary_budget = resolve_summary_budget(sample.dataset, args.max_summary_words, args.max_output_tokens)
             started = time.perf_counter()
             output = run_sample(sample, config, embedder, llm)
             runtime_seconds = time.perf_counter() - started
-            rouge = rouge_scores(output.summary, sample.references)
+            rouge = rouge_scores(output.summary, sample.references, sample.language)
             rows.append(
                 {
                     "dataset": sample.dataset,
@@ -169,6 +183,8 @@ def main() -> None:
                     "dedup_require_shared_phrase": args.dedup_require_shared_phrase,
                     "duplicate_edge_factor": args.duplicate_edge_factor,
                     "community_dedup": args.community_dedup,
+                    "max_summary_words": summary_budget.max_summary_words or "",
+                    "max_output_tokens": summary_budget.max_output_tokens or "",
                     "embedding_backend": embedder.backend,
                     "embedding_model": embedder.model_name,
                     "llm": args.llm,
@@ -181,6 +197,7 @@ def main() -> None:
                     "rouge2": rouge["rouge2"],
                     "rougeL": rouge["rougeL"],
                     "rouge_backend": rouge["rouge_backend"],
+                    "rouge_tokenizer": rouge["rouge_tokenizer"],
                     "reference_count": rouge["reference_count"],
                     "selected_reference_index": rouge["selected_reference_index"],
                     "reference_selector": rouge["reference_selector"],

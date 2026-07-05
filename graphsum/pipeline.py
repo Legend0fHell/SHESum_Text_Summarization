@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -16,6 +17,12 @@ from .chunking import make_chunks
 from .preprocess import Chunk, TriSentenceUnit, make_sentences, make_tri_units
 from .prompts import render_direct_prompt, render_merge_prompt, render_topic_prompt
 from .salience import compact_unit_texts, select_centroid_topk, select_pacsum
+
+
+DATASET_SUMMARY_BUDGETS = {
+    "vn_mds": {"max_summary_words": 180, "max_output_tokens": 300},
+    "vims": {"max_summary_words": 235, "max_output_tokens": 380},
+}
 
 
 @dataclass
@@ -39,6 +46,8 @@ class PipelineConfig:
     dedup_require_shared_phrase: bool = False
     duplicate_edge_factor: float = 0.35
     community_dedup: bool = True
+    max_summary_words: int | None = None
+    max_output_tokens: int | None = None
 
 
 @dataclass
@@ -127,6 +136,7 @@ def run_sample(
     trace: PipelineTrace | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> PipelineOutput:
+    summary_budget = resolve_summary_budget(sample.dataset, config.max_summary_words, config.max_output_tokens)
     _record_progress(trace, progress_callback, "preprocess", "Splitting documents and building segment windows")
     units: list[TriSentenceUnit] = []
     chunks: list[Chunk] = []
@@ -179,8 +189,14 @@ def run_sample(
         for chunk in prompt_chunks:
             support_ids.extend(support_by_chunk.get(chunk.chunk_id, []))
         community_support_ids.append(support_ids)
-        prompt = _community_prompt(prompt_chunks, compact_unit_texts(support_ids, unit_lookup), sample.language)
-        community_results.append(llm.summarize(prompt))
+        prompt = _community_prompt(
+            prompt_chunks,
+            compact_unit_texts(support_ids, unit_lookup),
+            sample.language,
+            sample.dataset,
+            summary_budget.max_summary_words,
+        )
+        community_results.append(llm.summarize(prompt, max_tokens=summary_budget.max_output_tokens))
         _trace_community_summary(trace, len(community_results) - 1, prompt_chunks, prompt, community_results[-1])
     if len(community_results) == 1:
         final = community_results[0]
@@ -189,12 +205,13 @@ def run_sample(
         merged = "\n".join(result.text for result in community_results)
         support_pool_ids = _select_higher_level_support(community_support_ids, unit_lookup, merged, embedder, config)
         support_pool = compact_unit_texts(support_pool_ids, unit_lookup, max_tokens=config.evidence_max_tokens)
-        merge_prompt = _merge_prompt(merged, support_pool, sample.language)
-        final = llm.summarize(merge_prompt)
+        merge_prompt = _merge_prompt(merged, support_pool, sample.language, sample.dataset, summary_budget.max_summary_words)
+        final = llm.summarize(merge_prompt, max_tokens=summary_budget.max_output_tokens)
         final.input_tokens += sum(result.input_tokens for result in community_results)
         final.output_tokens += sum(result.output_tokens for result in community_results)
         final.calls += sum(result.calls for result in community_results)
         _trace_summary_step(trace, "merge", "final_merge", merge_prompt, final)
+    final.text = trim_to_word_budget(final.text, summary_budget.max_summary_words)
     _trace_summary_graph(trace, chunks, communities, final.text)
     _record_progress(trace, progress_callback, "done", "Finished summarization")
     return PipelineOutput(final.text, final.input_tokens, final.output_tokens, final.calls, len(chunks), len(communities), trace)
@@ -203,13 +220,17 @@ def run_sample(
 def run_direct_sample(
     sample: Sample,
     llm: BaseLLM,
+    max_summary_words: int | None = None,
+    max_output_tokens: int | None = None,
     trace: PipelineTrace | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> PipelineOutput:
+    summary_budget = resolve_summary_budget(sample.dataset, max_summary_words, max_output_tokens)
     _record_progress(trace, progress_callback, "direct", "Sending all source documents directly to the LLM")
     source_text = "\n\n".join(_document_block(index, document) for index, document in enumerate(sample.documents, start=1))
-    prompt = render_direct_prompt(source_text, sample.language)
-    result = llm.summarize(prompt)
+    prompt = render_direct_prompt(source_text, sample.language, sample.dataset, summary_budget.max_summary_words)
+    result = llm.summarize(prompt, max_tokens=summary_budget.max_output_tokens)
+    result.text = trim_to_word_budget(result.text, summary_budget.max_summary_words)
     if trace is not None:
         trace.final_summary = result.text
         trace.summary_graph_nodes.append({"node_id": "direct_llm", "kind": "direct_llm", "label": "Direct LLM"})
@@ -371,13 +392,47 @@ def _select_higher_level_support(
     raise ValueError(f"Unknown salience method: {config.salience_method}")
 
 
-def _community_prompt(chunks: list[Chunk], support: str, language: str) -> str:
+def resolve_summary_budget(dataset: str, max_summary_words: int | None = None, max_output_tokens: int | None = None) -> "SummaryBudget":
+    defaults = DATASET_SUMMARY_BUDGETS.get(dataset, {})
+    return SummaryBudget(
+        max_summary_words=max_summary_words if max_summary_words is not None else defaults.get("max_summary_words"),
+        max_output_tokens=max_output_tokens if max_output_tokens is not None else defaults.get("max_output_tokens"),
+    )
+
+
+@dataclass(frozen=True)
+class SummaryBudget:
+    max_summary_words: int | None
+    max_output_tokens: int | None
+
+
+def trim_to_word_budget(text: str, max_words: int | None) -> str:
+    normalized = " ".join((text or "").split())
+    if max_words is None or max_words <= 0:
+        return normalized
+    sentences = [sentence.strip() for sentence in re.split(r"(?<=[.!?。！？])\s+", normalized) if sentence.strip()]
+    selected: list[str] = []
+    used_words = 0
+    for sentence in sentences:
+        words = sentence.split()
+        if selected and used_words + len(words) > max_words:
+            break
+        if not selected and len(words) > max_words:
+            return " ".join(words[:max_words])
+        selected.append(sentence)
+        used_words += len(words)
+    if selected:
+        return " ".join(selected)
+    return " ".join(normalized.split()[:max_words])
+
+
+def _community_prompt(chunks: list[Chunk], support: str, language: str, dataset: str, max_summary_words: int | None) -> str:
     chunk_text = "\n\n".join(chunk.text for chunk in sorted(chunks, key=lambda c: (c.document_id, c.position)))
-    return render_topic_prompt(chunk_text, support, language)
+    return render_topic_prompt(chunk_text, support, language, dataset, max_summary_words)
 
 
-def _merge_prompt(summaries: str, support: str, language: str) -> str:
-    return render_merge_prompt(summaries, support, language)
+def _merge_prompt(summaries: str, support: str, language: str, dataset: str, max_summary_words: int | None) -> str:
+    return render_merge_prompt(summaries, support, language, dataset, max_summary_words)
 
 
 def _document_block(index: int, document) -> str:

@@ -15,7 +15,7 @@ from graphsum.config import embedding_settings, experiment_settings, llm_setting
 from graphsum.evaluate import rouge_scores
 from graphsum.graph import GraphWeights
 from graphsum.llm import make_llm
-from graphsum.pipeline import Embedder, PipelineConfig, PipelineTrace, run_direct_sample, run_sample
+from graphsum.pipeline import Embedder, PipelineConfig, PipelineTrace, resolve_summary_budget, run_direct_sample, run_sample
 
 
 STAGES = ["preprocess", "embed", "entities", "support", "graph", "summarize", "merge", "direct", "done"]
@@ -49,6 +49,25 @@ def main() -> None:
         run_mode_options = ["graphsum", "pure_llm"]
         run_mode_default = "pure_llm" if env_experiment.pure_llm else "graphsum"
         run_mode = st.selectbox("Mode", run_mode_options, index=run_mode_options.index(run_mode_default))
+        budget_defaults = resolve_summary_budget(dataset, env_experiment.max_summary_words, env_experiment.max_output_tokens)
+        max_summary_words_input = st.number_input(
+            "Max summary words",
+            min_value=0,
+            max_value=2000,
+            value=budget_defaults.max_summary_words or 0,
+            step=5,
+            help="0 disables word-budget trimming. Defaults follow MoA Vietnamese dataset calibration.",
+        )
+        max_output_tokens_input = st.number_input(
+            "Max output tokens",
+            min_value=0,
+            max_value=4000,
+            value=budget_defaults.max_output_tokens or 0,
+            step=10,
+            help="0 disables the LLM output cap. Defaults follow MoA Vietnamese dataset calibration.",
+        )
+        max_summary_words = int(max_summary_words_input) or None
+        max_output_tokens = int(max_output_tokens_input) or None
         llm_options = ["dry_run", "openai_compatible"]
         llm_kind = st.selectbox("LLM", llm_options, index=llm_options.index(env_experiment.llm) if env_experiment.llm in llm_options else 0)
         model = st.text_input("LLM model", env_llm.model or "")
@@ -147,7 +166,14 @@ def main() -> None:
                 temperature=temperature,
             )
             if run_mode == "pure_llm":
-                output = run_direct_sample(sample, llm, trace=trace, progress_callback=progress_callback)
+                output = run_direct_sample(
+                    sample,
+                    llm,
+                    max_summary_words=max_summary_words,
+                    max_output_tokens=max_output_tokens,
+                    trace=trace,
+                    progress_callback=progress_callback,
+                )
             else:
                 embedder = Embedder(
                     dry_run=dry_embed,
@@ -174,10 +200,12 @@ def main() -> None:
                     pacsum_lambda1=pacsum_lambda1,
                     pacsum_lambda2=pacsum_lambda2,
                     entity_merge_threshold=entity_merge_threshold,
+                    max_summary_words=max_summary_words,
+                    max_output_tokens=max_output_tokens,
                 )
                 output = run_sample(sample, config, embedder, llm, trace=trace, progress_callback=progress_callback)
             runtime_seconds = time.perf_counter() - started
-            rouge = rouge_scores(output.summary, sample.references)
+            rouge = rouge_scores(output.summary, sample.references, sample.language)
             st.session_state["viewer_result"] = {
                 "selection_key": current_selection_key,
                 "sample_id": sample.sample_id,

@@ -5,11 +5,12 @@ Use this checklist to fill the TODO tables in `agent_docs/draft.md` and `final_r
 ## Evaluation Rules
 
 - VN-MDS and ViMs each provide two human gold summaries per sample.
-- Score each generated summary against both gold summaries, then select one reference per sample by maximum mean of ROUGE-2 and ROUGE-L.
+- Vietnamese ROUGE follows the MoA-MDS release default: character-level `unicode_char` tokenization, no stemming, and max-tuple reference selection over ROUGE-1, ROUGE-2, and ROUGE-L F1.
 - Report ROUGE-1, ROUGE-2, and ROUGE-L from the same selected reference, not independently maximized references.
 - VN-MDS uses raw references only (`*.ref1.txt`, `*.ref2.txt`); tokenized references (`*.tok.txt`) are excluded.
 - Result CSVs include the generated summary in `generated_summary`; keep these files for qualitative inspection and error analysis.
 - Result CSVs include `reference_count`, `selected_reference_index`, and `reference_selector` for auditability.
+- VN-MDS defaults to 180 final-summary words and 300 LLM output tokens; ViMs defaults to 235 words and 380 output tokens. Apply these budgets to GraphSum, no-graph, and pure LLM runs unless explicitly overriding them.
 - Real `openai_compatible` runs automatically write an aggregate metrics CSV beside the result file unless `--aggregate-output` is provided.
 - Use `streamlit run scripts/streamlit_app.py` for single-sample visualization of progress, segments, chunk communities, duplicate groups, community prompt deduplication, KNN graph edges, entities, summary graph, and final output.
 
