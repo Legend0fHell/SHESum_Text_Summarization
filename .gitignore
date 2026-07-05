@@ -11,3 +11,4 @@ __pycache__/
 runs/
 
 agent_docs/
+.agents/
