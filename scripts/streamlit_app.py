@@ -56,7 +56,7 @@ def main() -> None:
             max_value=2000,
             value=budget_defaults.max_summary_words or 0,
             step=5,
-            help="0 disables word-budget trimming. Defaults follow MoA Vietnamese dataset calibration.",
+            help="0 disables word-budget trimming. Defaults follow MoA dataset calibration.",
         )
         max_output_tokens_input = st.number_input(
             "Max output tokens",
@@ -64,7 +64,7 @@ def main() -> None:
             max_value=4000,
             value=budget_defaults.max_output_tokens or 0,
             step=10,
-            help="0 disables the LLM output cap. Defaults follow MoA Vietnamese dataset calibration.",
+            help="0 disables the LLM output cap. Defaults follow MoA dataset calibration.",
         )
         max_summary_words = int(max_summary_words_input) or None
         max_output_tokens = int(max_output_tokens_input) or None

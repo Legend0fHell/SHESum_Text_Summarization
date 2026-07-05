@@ -75,7 +75,7 @@ def main() -> None:
                 max_output_tokens=args.max_output_tokens,
             )
             runtime_seconds = time.perf_counter() - started
-            rouge = rouge_scores(output.summary, sample.references, sample.language)
+            rouge = rouge_scores(output.summary, sample.references, sample.language, rouge_tokenizer="default")
             rows.append(
                 {
                     "dataset": sample.dataset,
@@ -111,6 +111,7 @@ def main() -> None:
                     "rougeL": rouge["rougeL"],
                     "rouge_backend": rouge["rouge_backend"],
                     "rouge_tokenizer": rouge["rouge_tokenizer"],
+                    "rouge_use_stemmer": rouge["rouge_use_stemmer"],
                     "reference_count": rouge["reference_count"],
                     "selected_reference_index": rouge["selected_reference_index"],
                     "reference_selector": rouge["reference_selector"],
@@ -198,6 +199,7 @@ def main() -> None:
                     "rougeL": rouge["rougeL"],
                     "rouge_backend": rouge["rouge_backend"],
                     "rouge_tokenizer": rouge["rouge_tokenizer"],
+                    "rouge_use_stemmer": rouge["rouge_use_stemmer"],
                     "reference_count": rouge["reference_count"],
                     "selected_reference_index": rouge["selected_reference_index"],
                     "reference_selector": rouge["reference_selector"],

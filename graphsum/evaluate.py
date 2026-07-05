@@ -23,6 +23,7 @@ class RegexTokenizer:
 
 
 DEFAULT_ROUGE_SCORER = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=False)
+EN_STEMMED_ROUGE_SCORER = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
 VI_CHAR_ROUGE_SCORER = rouge_scorer.RougeScorer(
     ["rouge1", "rouge2", "rougeL"],
     use_stemmer=False,
@@ -36,7 +37,7 @@ VI_REGEX_ROUGE_SCORER = rouge_scorer.RougeScorer(
 
 
 def rouge_scores(prediction: str, references: list[str], language: str = "en", rouge_tokenizer: str | None = None) -> dict[str, object]:
-    scorer, tokenizer_name = _scorer_for(language, rouge_tokenizer)
+    scorer, tokenizer_name, use_stemmer = _scorer_for(language, rouge_tokenizer)
     if not references:
         return {
             "rouge1": 0.0,
@@ -44,11 +45,12 @@ def rouge_scores(prediction: str, references: list[str], language: str = "en", r
             "rougeL": 0.0,
             "rouge_backend": "rouge-score",
             "rouge_tokenizer": tokenizer_name,
+            "rouge_use_stemmer": use_stemmer,
             "reference_count": 0,
             "selected_reference_index": -1,
             "reference_selector": "max_rouge_tuple",
         }
-    scores = [_rouge_single(prediction, ref, scorer, tokenizer_name) for ref in references]
+    scores = [_rouge_single(prediction, ref, scorer, tokenizer_name, use_stemmer) for ref in references]
     selected_index, selected_score = max(
         enumerate(scores),
         key=lambda item: (item[1]["rouge1"], item[1]["rouge2"], item[1]["rougeL"]),
@@ -59,6 +61,7 @@ def rouge_scores(prediction: str, references: list[str], language: str = "en", r
         "rougeL": selected_score["rougeL"],
         "rouge_backend": selected_score["rouge_backend"],
         "rouge_tokenizer": selected_score["rouge_tokenizer"],
+        "rouge_use_stemmer": selected_score["rouge_use_stemmer"],
         "reference_count": len(references),
         "selected_reference_index": selected_index,
         "reference_selector": "max_rouge_tuple",
@@ -71,16 +74,24 @@ def write_csv(path: str | Path, rows: list[dict[str, object]]) -> None:
     pd.DataFrame(rows).to_csv(path, index=False, encoding="utf-8")
 
 
-def _scorer_for(language: str, rouge_tokenizer: str | None) -> tuple[rouge_scorer.RougeScorer, str]:
+def _scorer_for(language: str, rouge_tokenizer: str | None) -> tuple[rouge_scorer.RougeScorer, str, bool]:
     tokenizer_name = rouge_tokenizer or ("unicode_char" if language == "vi" else "default")
     if tokenizer_name == "unicode_char":
-        return VI_CHAR_ROUGE_SCORER, tokenizer_name
+        return VI_CHAR_ROUGE_SCORER, tokenizer_name, False
     if tokenizer_name == "vietnamese_aware":
-        return VI_REGEX_ROUGE_SCORER, tokenizer_name
-    return DEFAULT_ROUGE_SCORER, "default"
+        return VI_REGEX_ROUGE_SCORER, tokenizer_name, False
+    if language == "en":
+        return EN_STEMMED_ROUGE_SCORER, "default", True
+    return DEFAULT_ROUGE_SCORER, "default", False
 
 
-def _rouge_single(prediction: str, reference: str, scorer: rouge_scorer.RougeScorer, tokenizer_name: str) -> dict[str, object]:
+def _rouge_single(
+    prediction: str,
+    reference: str,
+    scorer: rouge_scorer.RougeScorer,
+    tokenizer_name: str,
+    use_stemmer: bool,
+) -> dict[str, object]:
     scores = scorer.score(reference, prediction)
     return {
         "rouge1": scores["rouge1"].fmeasure,
@@ -88,4 +99,5 @@ def _rouge_single(prediction: str, reference: str, scorer: rouge_scorer.RougeSco
         "rougeL": scores["rougeL"].fmeasure,
         "rouge_backend": "rouge-score",
         "rouge_tokenizer": tokenizer_name,
+        "rouge_use_stemmer": use_stemmer,
     }

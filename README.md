@@ -87,7 +87,7 @@ python scripts/summarize_results.py runs/graphsum_results.csv --output runs/summ
 
 `scripts/run_graphsum.py` also accepts `--aggregate-output <path>` to write aggregate metrics immediately after an experiment. For `--llm openai_compatible`, the runner automatically writes `<output_stem>_summary.csv` when `--aggregate-output` is not provided.
 
-Recorded metrics include ROUGE-1, ROUGE-2, ROUGE-L, ROUGE backend/tokenizer, input tokens, output tokens, LLM calls, runtime seconds, chunk count, community count, summary budgets, and the generated summary text. Vietnamese ROUGE follows the MoA-MDS release default: `rouge-score` with character-level `unicode_char` tokenization, no stemming, and max-tuple reference selection over ROUGE-1/2/L F1. VN-MDS and ViMs also default to MoA-MDS summary budgets: VN-MDS 180 words / 300 output tokens; ViMs 235 words / 380 output tokens.
+Recorded metrics include ROUGE-1, ROUGE-2, ROUGE-L, ROUGE backend/tokenizer/stemmer settings, input tokens, output tokens, LLM calls, runtime seconds, chunk count, community count, summary budgets, and the generated summary text.
 
 `dry_run` and `--dry-embed` are for pipeline debugging only and must not be reported as paper results.
 
@@ -108,6 +108,23 @@ Pure LLM baseline:
 ```powershell
 python scripts/run_graphsum.py --dataset vn_mds --data-root datasets --limit 5 --pure-llm --llm openai_compatible --model <model-name> --base-url http://localhost:8000/v1 --output runs/vn_mds_pure_llm.csv
 ```
+
+Offline Multi-News setup:
+
+```powershell
+python -c "from datasets import load_dataset; ds = load_dataset('Awesome075/multi_news_parquet'); ds.save_to_disk('datasets/Multi-News')"
+```
+
+After this, `--dataset multi_news --data-root datasets` loads `datasets/Multi-News` with `load_from_disk` and uses the `test` split when the saved object is a `DatasetDict`. If `datasets/Multi-News` is absent, the loader falls back to HuggingFace `load_dataset("Awesome075/multi_news_parquet", split="test")`.
+
+MoA-MDS runtime comparison using the code in `libs/MoA-MDS` with this project's `.env` LLM settings:
+
+```powershell
+python scripts/run_moa_mds.py --dataset vn_mds --data-root datasets --limit 5 --output runs/vn_mds_moa_mds_real.csv
+python scripts/run_moa_mds.py --dataset vims --data-root datasets --limit 5 --output runs/vims_moa_mds_real.csv
+```
+
+The wrapper converts GraphSum-loaded samples into the MoA-MDS unified sample schema, uses `GRAPHSUM_LLM_MODEL`, `GRAPHSUM_LLM_BASE_URL`, `GRAPHSUM_LLM_API_KEY`, and `GRAPHSUM_LLM_TEMPERATURE`, writes MoA case-study artifacts under `runs/moa_mds_case_studies`, and emits a comparable CSV with ROUGE, token usage, LLM calls, runtime, generated summary, and MoA KG metrics. Use `--no-case-studies` to skip MoA artifact files.
 
 ## Streamlit Sample Viewer
 

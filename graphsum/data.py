@@ -29,7 +29,7 @@ def load_samples(dataset: str, root: str | Path, limit: int | None = None) -> li
     elif dataset == "vims":
         samples = list(_load_vims(root / "ViMs"))
     elif dataset == "multi_news":
-        samples = list(_load_multi_news(limit=limit))
+        samples = list(_load_multi_news(root / "Multi-News", limit=limit))
         return samples
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
@@ -99,12 +99,21 @@ def _load_vims(root: Path) -> Iterable[Sample]:
             yield Sample(sample_id, documents, references, "vi", "vims")
 
 
-def _load_multi_news(limit: int | None = None) -> Iterable[Sample]:
+def _load_multi_news(local_path: Path, limit: int | None = None) -> Iterable[Sample]:
     try:
-        from datasets import load_dataset
+        from datasets import DatasetDict, load_dataset, load_from_disk
     except ImportError as exc:
-        raise RuntimeError("Install `datasets` to load Multi-News from HuggingFace.") from exc
-    dataset = load_dataset("Awesome075/multi_news_parquet", split="test")
+        raise RuntimeError("Install `datasets` to load Multi-News from HuggingFace or a local saved dataset.") from exc
+    if local_path.exists():
+        loaded = load_from_disk(str(local_path))
+        if isinstance(loaded, DatasetDict):
+            if "test" not in loaded:
+                raise ValueError(f"Local Multi-News dataset at {local_path} does not contain a 'test' split.")
+            dataset = loaded["test"]
+        else:
+            dataset = loaded
+    else:
+        dataset = load_dataset("Awesome075/multi_news_parquet", split="test")
     if limit:
         dataset = dataset.select(range(min(limit, len(dataset))))
     for idx, row in enumerate(dataset):

@@ -1,5 +1,6 @@
 datasets/ViMs
 datasets/VN-MDS
+datasets/Multi-News
 
 __pycache__/
 .env

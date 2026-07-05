@@ -47,6 +47,7 @@ GROUP_COLUMNS = [
     "entity_merge_threshold",
     "rouge_backend",
     "rouge_tokenizer",
+    "rouge_use_stemmer",
 ]
 
 

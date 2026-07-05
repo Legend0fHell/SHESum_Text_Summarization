@@ -22,6 +22,7 @@ from .salience import compact_unit_texts, select_centroid_topk, select_pacsum
 DATASET_SUMMARY_BUDGETS = {
     "vn_mds": {"max_summary_words": 180, "max_output_tokens": 300},
     "vims": {"max_summary_words": 235, "max_output_tokens": 380},
+    "multi_news": {"max_summary_words": 260, "max_output_tokens": 420},
 }
 
 
