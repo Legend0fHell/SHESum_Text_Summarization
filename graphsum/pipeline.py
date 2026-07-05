@@ -183,9 +183,11 @@ def run_sample(
     _record_progress(trace, progress_callback, "summarize", "Generating community-level summaries")
     community_results: list[LLMResult] = []
     community_support_ids: list[list[str]] = []
+    merge_entity_chunks: list[Chunk] = []
     for community in communities:
         community_chunks = [chunks[idx] for idx in community]
         prompt_chunks = _deduplicate_community_chunks(community_chunks, chunks, dedup_result, config, trace, len(community_results))
+        merge_entity_chunks.extend(prompt_chunks)
         support_ids = []
         for chunk in prompt_chunks:
             support_ids.extend(support_by_chunk.get(chunk.chunk_id, []))
@@ -206,7 +208,7 @@ def run_sample(
         merged = "\n".join(result.text for result in community_results)
         support_pool_ids = _select_higher_level_support(community_support_ids, unit_lookup, merged, embedder, config)
         support_pool = compact_unit_texts(support_pool_ids, unit_lookup, max_tokens=config.evidence_max_tokens)
-        merge_prompt = _merge_prompt(merged, support_pool, sample.language, sample.dataset, summary_budget.max_summary_words)
+        merge_prompt = _merge_prompt(merged, support_pool, merge_entity_chunks, sample.language, sample.dataset, summary_budget.max_summary_words)
         final = llm.summarize(merge_prompt, max_tokens=summary_budget.max_output_tokens)
         final.input_tokens += sum(result.input_tokens for result in community_results)
         final.output_tokens += sum(result.output_tokens for result in community_results)
@@ -429,11 +431,27 @@ def trim_to_word_budget(text: str, max_words: int | None) -> str:
 
 def _community_prompt(chunks: list[Chunk], support: str, language: str, dataset: str, max_summary_words: int | None) -> str:
     chunk_text = "\n\n".join(chunk.text for chunk in sorted(chunks, key=lambda c: (c.document_id, c.position)))
-    return render_topic_prompt(chunk_text, support, language, dataset, max_summary_words)
+    entities = _format_chunk_entities(chunks)
+    return render_topic_prompt(chunk_text, support, entities, language, dataset, max_summary_words)
 
 
-def _merge_prompt(summaries: str, support: str, language: str, dataset: str, max_summary_words: int | None) -> str:
-    return render_merge_prompt(summaries, support, language, dataset, max_summary_words)
+def _merge_prompt(summaries: str, support: str, chunks: list[Chunk], language: str, dataset: str, max_summary_words: int | None) -> str:
+    entities = _format_chunk_entities(chunks)
+    return render_merge_prompt(summaries, support, entities, language, dataset, max_summary_words)
+
+
+def _format_chunk_entities(chunks: list[Chunk], max_items: int = 120) -> str:
+    phrase_types: dict[str, set[str]] = {}
+    for chunk in chunks:
+        for phrase, types in chunk.phrase_types.items():
+            phrase_types.setdefault(phrase, set()).update(types)
+    lines = []
+    for phrase, types in sorted(phrase_types.items(), key=lambda item: (sorted(item[1]), item[0]))[:max_items]:
+        type_label = ", ".join(sorted(types))
+        lines.append(f"- {phrase} ({type_label})")
+    if len(phrase_types) > max_items:
+        lines.append(f"- ... {len(phrase_types) - max_items} additional anchors omitted")
+    return "\n".join(lines)
 
 
 def _document_block(index: int, document) -> str:

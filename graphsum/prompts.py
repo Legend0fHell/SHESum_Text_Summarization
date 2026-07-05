@@ -8,6 +8,7 @@ You are a multilingual, fact-grounded community summarization agent. Write in {l
 Given:
 1. Ordered source text from one chunk community.
 2. Source support selected from original source segments.
+3. Canonical entities and factual anchors extracted from the community chunks after deduplication.
 
 Produce a coherent community-level summary that:
 - captures the central event, actors, actions, causes, consequences, and important context;
@@ -26,12 +27,16 @@ Produce a coherent community-level summary that:
  - Determine the main event or situation, the central actors, and the most important actions or outcomes.
  - Use the ordered source text for coverage and narrative flow.
 2. Verify Against Support
- - Prefer claims grounded in the selected source support when details are ambiguous.
- - Keep concrete facts only when supported by the source text or source support.
-3. Compose
- - Write clear, neutral prose in inverted-pyramid style: most important information first, context after.
- - Merge repeated information once.
- - Do not mention "source text", "source support", "chunk", "community", "segment", "prompt", or the summarization process.
+  - Prefer claims grounded in the selected source support when details are ambiguous.
+  - Keep concrete facts only when supported by the source text or source support.
+3. Use Entity and Factual Anchors
+  - Treat the entity list as a checklist of names, organizations, locations, dates, numbers, money amounts, and other factual anchors that may be important.
+  - Include an entity or factual anchor only when it is relevant to the main event and supported by the source text or source support.
+  - Do not invent relationships between listed entities; the list is not a knowledge graph and does not by itself prove a claim.
+4. Compose
+  - Write clear, neutral prose in inverted-pyramid style: most important information first, context after.
+  - Merge repeated information once.
+  - Do not mention "source text", "source support", "entity list", "chunk", "community", "segment", "prompt", or the summarization process.
 
 [Input]
 Source text:
@@ -42,6 +47,11 @@ Source text:
 Source support:
 ---
 {source_support}
+---
+
+Canonical entities and factual anchors:
+---
+{entities}
 ---
 
 [Output]
@@ -56,6 +66,7 @@ You are a multilingual, metadata-aware summary synthesizer. Write in {language_n
 Given:
 1. Community-level summaries generated from chunk communities.
 2. Source-derived support inherited from the original source segments.
+3. Canonical entities and factual anchors extracted from deduplicated community chunks.
 
 Produce a final integrated summary that:
 - preserves the main information from all important community summaries;
@@ -75,11 +86,15 @@ Produce a final integrated summary that:
  - Identify which community summaries contain the global lead, supporting context, consequences, and caveats.
  - Merge repeated claims once and preserve complementary details.
 2. Verify and Resolve
- - Use source-derived support to check factual accuracy.
- - If summaries conflict, state the contrast only when the source-derived support justifies it; otherwise use cautious wording.
-3. Compose Final Summary
- - Use inverted-pyramid structure: lead first, context and consequences after.
- - Do not reference "community summaries", "source support", "metadata", "chunks", "segments", or the summarization process.
+  - Use source-derived support to check factual accuracy.
+  - If summaries conflict, state the contrast only when the source-derived support justifies it; otherwise use cautious wording.
+3. Use Entity and Factual Anchors
+  - Use the entity list as a factual checklist while merging, especially for names, organizations, locations, dates, numbers, and monetary facts.
+  - Preserve anchors that are globally important and supported; omit anchors that are peripheral, repeated, or unsupported by the summaries/support.
+  - Do not infer new relationships solely because entities appear together in the list.
+4. Compose Final Summary
+  - Use inverted-pyramid structure: lead first, context and consequences after.
+  - Do not reference "community summaries", "source support", "entity list", "metadata", "chunks", "segments", or the summarization process.
 
 [Input]
 Community summaries:
@@ -90,6 +105,11 @@ Community summaries:
 Source-derived support:
 ---
 {source_support}
+---
+
+Canonical entities and factual anchors:
+---
+{entities}
 ---
 
 [Output]
@@ -141,6 +161,7 @@ def language_name(language: str) -> str:
 def render_topic_prompt(
     source_text: str,
     source_support: str,
+    entities: str,
     language: str,
     dataset: str = "",
     max_summary_words: int | None = None,
@@ -151,12 +172,14 @@ def render_topic_prompt(
         length_constraint=length_constraint(max_summary_words),
         source_text=source_text.strip(),
         source_support=source_support.strip(),
+        entities=entities.strip() or "None.",
     )
 
 
 def render_merge_prompt(
     topic_summaries: str,
     source_support: str,
+    entities: str,
     language: str,
     dataset: str = "",
     max_summary_words: int | None = None,
@@ -167,6 +190,7 @@ def render_merge_prompt(
         length_constraint=length_constraint(max_summary_words),
         topic_summaries=topic_summaries.strip(),
         source_support=source_support.strip(),
+        entities=entities.strip() or "None.",
     )
 
 
